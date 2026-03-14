@@ -2,6 +2,7 @@ package changelog
 
 import (
 	"bytes"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -55,5 +56,55 @@ func TestBodyBulletLinesTrimsAndRemovesBlankLines(t *testing.T) {
 
 	if lines[0] != "Line one" || lines[1] != "Line two" {
 		t.Fatalf("unexpected lines: %#v", lines)
+	}
+}
+
+func TestRenderLogIncludesRelativePathForEachEntry(t *testing.T) {
+	baseDir := "/repo"
+	entryPath := filepath.Join(baseDir, ".changes", "api", "oauth.md")
+
+	changeLog := &ChangeLog{
+		Groups: []VersionGroup{{
+			Version: "staging",
+			TypeGroups: []TypeGroup{{
+				Title: "Features",
+				Entries: []EntryWithMeta{{
+					Entry: changeentry.Entry{
+						Type: changeentry.ChangeTypeFeature,
+						Body: "Add OAuth support.",
+					},
+					Path: entryPath,
+				}},
+			}},
+		}},
+	}
+
+	buffer := bytes.NewBuffer(nil)
+	if err := RenderLog(changeLog, baseDir, 80, buffer); err != nil {
+		t.Fatalf("RenderLog returned error: %v", err)
+	}
+
+	output := buffer.String()
+	if !strings.Contains(output, "[.changes/api/oauth.md]") {
+		t.Fatalf("expected log output to contain relative path, got:\n%s", output)
+	}
+
+	pathIndex := strings.Index(output, "[.changes/api/oauth.md]")
+	typeIndex := strings.Index(output, "feature")
+	if pathIndex == -1 || typeIndex == -1 || pathIndex >= typeIndex {
+		t.Fatalf("expected log output to put path before type, got:\n%s", output)
+	}
+}
+
+func TestTruncateLogPreviewAddsEllipsisWhenPreviewTooLong(t *testing.T) {
+	input := strings.Repeat("a", 120)
+	result := truncateLogPreview(input, 80)
+
+	if len(result) != 80 {
+		t.Fatalf("expected truncated length 80, got %d", len(result))
+	}
+
+	if !strings.HasSuffix(result, "...") {
+		t.Fatalf("expected truncated preview to end with ellipsis, got %q", result)
 	}
 }

@@ -32,6 +32,11 @@ func LogCommand() *cli.Command {
 				Name:  "type",
 				Usage: changeentry.TypeFlagUsage(),
 			},
+			&cli.IntFlag{
+				Name:  "preview-length",
+				Usage: "Maximum preview length for each log entry message",
+				Value: 80,
+			},
 		},
 		Action: logAction,
 	}
@@ -80,5 +85,5 @@ func logAction(ctx context.Context, cmd *cli.Command) error {
 		view = changelog.VersionOnly(cl, version)
 	}
 
-	return changelog.RenderLog(view, repoRoot, os.Stdout)
+	return changelog.RenderLog(view, repoRoot, cmd.Int("preview-length"), os.Stdout)
 }

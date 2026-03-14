@@ -126,6 +126,7 @@ Shows a human-friendly release preview.
 - No argument: shows `staging` (changes since last SemVer tag).
 - With `version` (for example `v1.4.0`): shows changes assigned to that release.
 - Filters: `--audience`, `--component`, `--type`.
+- `--preview-length <n>` controls preview truncation length (default: `80`).
 - In multi-module mode, tags are scoped to the module's `tagPrefix`.
 
 Version assignment rules:

@@ -5,12 +5,19 @@ import (
 	"io"
 	"path/filepath"
 	"strings"
+	"text/tabwriter"
 )
+
+const defaultLogPreviewMaxLen = 80
 
 // RenderLog writes a human-readable, columnar overview of the changelog
 // groups to w.  baseDir is used to compute display-friendly relative paths
 // (pass the repository root or working directory).
-func RenderLog(cl *ChangeLog, baseDir string, w io.Writer) error {
+func RenderLog(cl *ChangeLog, baseDir string, previewMaxLen int, w io.Writer) error {
+	if previewMaxLen <= 0 {
+		previewMaxLen = defaultLogPreviewMaxLen
+	}
+
 	hasAny := false
 	for _, g := range cl.Groups {
 		if g.TotalEntries() > 0 {
@@ -41,25 +48,30 @@ func RenderLog(cl *ChangeLog, baseDir string, w io.Writer) error {
 		fmt.Fprintf(w, "%s  (%d %s)\n\n",
 			heading, total, pluralise(total, "entry", "entries"))
 
+		tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+
 		for _, tg := range group.TypeGroups {
 			for _, e := range tg.Entries {
+				relPath := displayPath(baseDir, e.Path)
+
 				preview := e.Preview()
 				if preview == "" {
-					relPath, relErr := filepath.Rel(baseDir, e.Path)
-					if relErr != nil {
-						relPath = filepath.Base(e.Path)
-					}
 					preview = relPath
 				}
+				preview = truncateLogPreview(preview, previewMaxLen)
 
 				breaking := ""
 				if e.Entry.Breaking {
 					breaking = "  [breaking]"
 				}
 
-				fmt.Fprintf(w, "  %-10s  %s%s\n",
-					string(e.Entry.Type), preview, breaking)
+				fmt.Fprintf(tw, "  [%s]\t%s\t%s%s\n",
+					relPath, string(e.Entry.Type), preview, breaking)
 			}
+		}
+
+		if err := tw.Flush(); err != nil {
+			return err
 		}
 	}
 
@@ -138,4 +150,25 @@ func bodyBulletLines(body string) []string {
 	}
 
 	return lines
+}
+
+func displayPath(baseDir string, path string) string {
+	relPath, err := filepath.Rel(baseDir, path)
+	if err != nil {
+		return filepath.Base(path)
+	}
+
+	return relPath
+}
+
+func truncateLogPreview(value string, maxLen int) string {
+	trimmed := strings.TrimSpace(value)
+	if maxLen <= 3 {
+		return trimmed
+	}
+	if len(trimmed) <= maxLen {
+		return trimmed
+	}
+
+	return strings.TrimSpace(trimmed[:maxLen-3]) + "..."
 }
