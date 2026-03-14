@@ -13,6 +13,9 @@ chagg add auth/new-login
 # validate all change entries
 chagg check
 
+# plan cleanup of released entries (dry-run)
+chagg tidy
+
 # preview unreleased (staging) changes
 chagg log
 
@@ -145,6 +148,29 @@ Generates a Markdown changelog grouped by version and change type.
 - Filters: `--audience`, `--component`, `--type`.
 - In multi-module mode, output is generated for the module associated with the current `.changes` directory.
 
+### `chagg tidy`
+
+Reorganizes released entries into archive folders without creating commits.
+
+- Default is dry-run: shows planned moves only.
+- `--apply`: executes the file moves.
+- `--all`: processes all discovered `.changes` directories in the repo.
+- Released entries are moved to `.changes/archive/<version>/<filename>.md`.
+- Staging entries are left untouched.
+
+Examples:
+
+```bash
+# preview planned tidy operations
+chagg tidy
+
+# apply tidy operations in current changes directory
+chagg tidy --apply
+
+# apply across all modules/.changes dirs
+chagg tidy --all --apply
+```
+
 ### `chagg release`
 
 Creates the next release tag from current staging changes.
@@ -186,6 +212,9 @@ chagg add auth/token-fix --type fix --component auth
 
 # 2) validate
 chagg check
+
+# optional: archive released entries (dry-run first)
+chagg tidy
 
 # 3) preview
 chagg log

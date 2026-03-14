@@ -19,6 +19,7 @@ func main() {
 			commands.LogCommand(),
 			commands.AddCommand(),
 			commands.CheckCommand(),
+			commands.TidyCommand(),
 			commands.GenerateCommand(),
 			commands.ReleaseCommand(),
 		},
