@@ -80,8 +80,14 @@ func (g VersionGroup) TotalEntries() int {
 // ChangeLog is the full ordered set of version groups.
 // Groups are ordered: staging first (when present), then newest tag → oldest.
 type ChangeLog struct {
-	Module changeentry.ModuleConfig
-	Groups []VersionGroup
+	Module         changeentry.ModuleConfig
+	InvalidEntries []InvalidEntry
+	Groups         []VersionGroup
+}
+
+type InvalidEntry struct {
+	Path   string
+	Errors []error
 }
 
 // FilterOptions controls which entries are retained after loading.

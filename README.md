@@ -131,6 +131,7 @@ Shows a human-friendly release preview.
 - Filters: `--audience`, `--component`, `--type`.
 - `--preview-length <n>` controls preview truncation length (default: `80`).
 - In multi-module mode, tags are scoped to the module's `tagPrefix`.
+- If invalid change files are present, `log` fails and asks you to run `chagg check`.
 
 Version assignment rules:
 
@@ -147,6 +148,7 @@ Generates a Markdown changelog grouped by version and change type.
 - `--since <version>`: include that version and newer versions.
 - Filters: `--audience`, `--component`, `--type`.
 - In multi-module mode, output is generated for the module associated with the current `.changes` directory.
+- If invalid change files are present, `generate` fails and asks you to run `chagg check`.
 
 ### `chagg tidy`
 

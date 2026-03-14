@@ -38,15 +38,20 @@ var typeTitles = map[changeentry.ChangeType]string{
 func LoadChangeLog(repoRoot string, module changeentry.ModuleConfig, filter FilterOptions) (*ChangeLog, error) {
 	tags, _ := ListSemVerTags(repoRoot, module.TagPrefix) // non-fatal; proceed without history
 
-	entries, err := loadEntries(repoRoot, module, tags)
+	entries, invalidEntries, err := loadEntries(repoRoot, module, tags)
 	if err != nil {
 		return nil, err
+	}
+
+	if len(invalidEntries) > 0 {
+		return nil, invalidEntriesError(invalidEntries)
 	}
 
 	entries = applyFilter(entries, filter)
 
 	cl := buildChangeLog(entries, tags)
 	cl.Module = module
+	cl.InvalidEntries = invalidEntries
 	return cl, nil
 }
 
@@ -103,13 +108,14 @@ func ApplyVersionFilter(cl *ChangeLog, since string, latestOnly bool) *ChangeLog
 }
 
 // loadEntries walks changesDir, parses each .md file, and resolves version info.
-func loadEntries(repoRoot string, module changeentry.ModuleConfig, tags []Tag) ([]EntryWithMeta, error) {
+func loadEntries(repoRoot string, module changeentry.ModuleConfig, tags []Tag) ([]EntryWithMeta, []InvalidEntry, error) {
 	changesDir := module.ChangesDir
 	if _, statErr := os.Stat(changesDir); os.IsNotExist(statErr) {
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	var entries []EntryWithMeta
+	var invalidEntries []InvalidEntry
 
 	err := filepath.WalkDir(changesDir, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
@@ -129,6 +135,7 @@ func loadEntries(repoRoot string, module changeentry.ModuleConfig, tags []Tag) (
 
 		entry, errs := changeentry.ParseEntry(string(contentBytes))
 		if len(errs) > 0 {
+			invalidEntries = append(invalidEntries, InvalidEntry{Path: path, Errors: errs})
 			return nil // skip invalid entries in log/generate context
 		}
 
@@ -147,7 +154,34 @@ func loadEntries(repoRoot string, module changeentry.ModuleConfig, tags []Tag) (
 		return nil
 	})
 
-	return entries, err
+	return entries, invalidEntries, err
+}
+
+func invalidEntriesError(invalidEntries []InvalidEntry) error {
+	first := invalidEntries[0]
+	firstMessage := "unknown validation error"
+	if len(first.Errors) > 0 {
+		firstMessage = first.Errors[0].Error()
+	}
+
+	return changeentry.NewValidationError(
+		"changes",
+		fmt.Sprintf(
+			"found %d invalid change %s (first: %s: %s). Run `chagg check` for details",
+			len(invalidEntries),
+			pluralizeCount(len(invalidEntries), "entry", "entries"),
+			first.Path,
+			firstMessage,
+		),
+	)
+}
+
+func pluralizeCount(n int, singular, plural string) string {
+	if n == 1 {
+		return singular
+	}
+
+	return plural
 }
 
 // resolveVersion determines which version label to assign to an entry.
