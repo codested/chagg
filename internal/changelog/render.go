@@ -77,9 +77,6 @@ func RenderMarkdown(cl *ChangeLog, w io.Writer) error {
 		}
 
 		heading := "## " + group.VersionTitle()
-		if date := group.FormattedDate(); date != "" {
-			heading += " – " + date
-		}
 
 		fmt.Fprintln(w)
 		fmt.Fprintln(w, heading)
@@ -90,26 +87,26 @@ func RenderMarkdown(cl *ChangeLog, w io.Writer) error {
 			fmt.Fprintln(w)
 
 			for _, e := range tg.Entries {
-				var sb strings.Builder
-				sb.WriteString("- ")
+				lines := bodyBulletLines(e.Entry.Body)
+				if len(lines) == 0 {
+					lines = []string{filepath.Base(e.Path)}
+				}
 
+				var firstLine strings.Builder
 				if e.Entry.Breaking {
-					sb.WriteString("**Breaking** – ")
+					firstLine.WriteString("**Breaking** – ")
 				}
-
-				preview := e.Preview()
-				if preview == "" {
-					preview = filepath.Base(e.Path)
-				}
-				sb.WriteString(preview)
-
+				firstLine.WriteString(lines[0])
 				if len(e.Entry.Component) > 0 {
-					sb.WriteString(" *(")
-					sb.WriteString(strings.Join(e.Entry.Component, ", "))
-					sb.WriteString(")*")
+					firstLine.WriteString(" *(")
+					firstLine.WriteString(strings.Join(e.Entry.Component, ", "))
+					firstLine.WriteString(")*")
 				}
 
-				fmt.Fprintln(w, sb.String())
+				fmt.Fprintf(w, "- %s\n", firstLine.String())
+				for _, line := range lines[1:] {
+					fmt.Fprintf(w, "  %s\n", line)
+				}
 			}
 		}
 	}
@@ -122,4 +119,23 @@ func pluralise(n int, singular, plural string) string {
 		return singular
 	}
 	return plural
+}
+
+func bodyBulletLines(body string) []string {
+	trimmed := strings.TrimSpace(body)
+	if trimmed == "" {
+		return nil
+	}
+
+	rawLines := strings.Split(trimmed, "\n")
+	lines := make([]string, 0, len(rawLines))
+	for _, line := range rawLines {
+		content := strings.TrimSpace(line)
+		if content == "" {
+			continue
+		}
+		lines = append(lines, content)
+	}
+
+	return lines
 }

@@ -166,6 +166,22 @@ func TestRenderEntryIncludesNonDefaultFields(t *testing.T) {
 	}
 }
 
+func TestRenderEntryKeepsBlankLineBetweenHeaderAndBody(t *testing.T) {
+	entry := Entry{
+		Type: ChangeTypeDocs,
+		Body: "Document usage.",
+	}
+
+	rendered, err := RenderEntry(entry)
+	if err != nil {
+		t.Fatalf("RenderEntry returned error: %v", err)
+	}
+
+	if !strings.Contains(rendered, "---\n\nDocument usage.") {
+		t.Fatalf("expected blank line between front matter and body, got:\n%s", rendered)
+	}
+}
+
 func TestCreateChangeCreatesTargetFileUnderChangesDirectory(t *testing.T) {
 	tempDir := t.TempDir()
 	repoDir := filepath.Join(tempDir, "repo")
