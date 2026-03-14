@@ -59,6 +59,75 @@ func TestBodyBulletLinesTrimsAndRemovesBlankLines(t *testing.T) {
 	}
 }
 
+func TestRenderMarkdownRendersDocsAsUnformattedBodyBeforeSections(t *testing.T) {
+	changeLog := &ChangeLog{
+		Groups: []VersionGroup{{
+			Version: "v1.2.3",
+			TypeGroups: []TypeGroup{
+				{
+					ChangeType: changeentry.ChangeTypeDocs,
+					Title:      "Documentation",
+					Entries: []EntryWithMeta{{
+						Entry: changeentry.Entry{Type: changeentry.ChangeTypeDocs, Body: "Imported notes from release API."},
+						Path:  ".changes/docs/imported.md",
+					}},
+				},
+				{
+					ChangeType: changeentry.ChangeTypeFeature,
+					Title:      "Features",
+					Entries: []EntryWithMeta{{
+						Entry: changeentry.Entry{Type: changeentry.ChangeTypeFeature, Body: "Add OAuth support."},
+						Path:  ".changes/api/oauth.md",
+					}},
+				},
+			},
+		}},
+	}
+
+	buffer := bytes.NewBuffer(nil)
+	if err := RenderMarkdown(changeLog, buffer); err != nil {
+		t.Fatalf("RenderMarkdown returned error: %v", err)
+	}
+
+	output := buffer.String()
+	if strings.Contains(output, "### Documentation") {
+		t.Fatalf("expected docs not to render in their own section, got:\n%s", output)
+	}
+
+	headingIndex := strings.Index(output, "## v1.2.3")
+	docIndex := strings.Index(output, "Imported notes from release API.")
+	featureIndex := strings.Index(output, "### Features")
+	if headingIndex == -1 || docIndex == -1 || featureIndex == -1 || !(headingIndex < docIndex && docIndex < featureIndex) {
+		t.Fatalf("expected docs body between version heading and feature section, got:\n%s", output)
+	}
+}
+
+func TestRenderMarkdownSeparatesMultipleDocsWithBlankLine(t *testing.T) {
+	changeLog := &ChangeLog{
+		Groups: []VersionGroup{{
+			Version: "v2.0.0",
+			TypeGroups: []TypeGroup{{
+				ChangeType: changeentry.ChangeTypeDocs,
+				Title:      "Documentation",
+				Entries: []EntryWithMeta{
+					{Entry: changeentry.Entry{Type: changeentry.ChangeTypeDocs, Body: "First imported release note."}, Path: ".changes/docs/one.md"},
+					{Entry: changeentry.Entry{Type: changeentry.ChangeTypeDocs, Body: "Second imported release note."}, Path: ".changes/docs/two.md"},
+				},
+			}},
+		}},
+	}
+
+	buffer := bytes.NewBuffer(nil)
+	if err := RenderMarkdown(changeLog, buffer); err != nil {
+		t.Fatalf("RenderMarkdown returned error: %v", err)
+	}
+
+	output := buffer.String()
+	if !strings.Contains(output, "First imported release note.\n\nSecond imported release note.") {
+		t.Fatalf("expected blank line separation between docs entries, got:\n%s", output)
+	}
+}
+
 func TestRenderLogIncludesRelativePathForEachEntry(t *testing.T) {
 	baseDir := "/repo"
 	entryPath := filepath.Join(baseDir, ".changes", "api", "oauth.md")
