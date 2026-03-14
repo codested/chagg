@@ -1,19 +1,15 @@
 # Changelog
-{{ range .Groups }}
+{{- range .Groups }}
 
 {{ .Heading }}
-{{ if .DocsBlock }}
+{{- if .DocsBlock }}
 
 {{ .DocsBlock }}
-
-{{ end }}
-{{ range .TypeGroups }}
+{{- end }}
+{{- range .TypeGroups }}
 
 ### {{ .Title }}
 
 {{ .EntriesBlock }}
-{{ end }}
-{{ end }}
-
-
-
+{{- end }}
+{{- end }}
