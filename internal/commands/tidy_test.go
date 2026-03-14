@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 )
@@ -59,5 +60,34 @@ func TestIsAlreadyArchivedInVersion(t *testing.T) {
 
 	if isAlreadyArchivedInVersion(changesDir, "0.1.1", notArchived) {
 		t.Fatalf("expected non-archived path to be rejected")
+	}
+}
+
+func TestPruneEmptyChangeDirectoriesRemovesEmptyNestedDirs(t *testing.T) {
+	tempDir := t.TempDir()
+	changesDir := filepath.Join(tempDir, ".changes")
+	emptyNested := filepath.Join(changesDir, "legacy", "old")
+	nonEmpty := filepath.Join(changesDir, "archive", "0.1.0")
+
+	if err := os.MkdirAll(emptyNested, 0o755); err != nil {
+		t.Fatalf("mkdir empty nested: %v", err)
+	}
+	if err := os.MkdirAll(nonEmpty, 0o755); err != nil {
+		t.Fatalf("mkdir non-empty: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(nonEmpty, "entry.md"), []byte("x"), 0o644); err != nil {
+		t.Fatalf("write entry: %v", err)
+	}
+
+	if err := pruneEmptyChangeDirectories(changesDir); err != nil {
+		t.Fatalf("pruneEmptyChangeDirectories returned error: %v", err)
+	}
+
+	if _, err := os.Stat(emptyNested); !os.IsNotExist(err) {
+		t.Fatalf("expected %s to be removed, err=%v", emptyNested, err)
+	}
+
+	if _, err := os.Stat(nonEmpty); err != nil {
+		t.Fatalf("expected non-empty dir to remain: %v", err)
 	}
 }

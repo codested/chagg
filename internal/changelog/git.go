@@ -252,6 +252,87 @@ func FileAddedAt(repoRoot, path string) (time.Time, bool) {
 	return t, true
 }
 
+// FileAddedAtMany returns add dates for multiple files using a single git log call.
+// Paths may be absolute or relative. The returned map key is the absolute path.
+// Any file missing from the result should be resolved via FileAddedAt fallback.
+func FileAddedAtMany(repoRoot string, paths []string) map[string]time.Time {
+	if len(paths) == 0 {
+		return map[string]time.Time{}
+	}
+
+	type pathSpec struct {
+		abs string
+		rel string
+	}
+
+	pathSpecs := make([]pathSpec, 0, len(paths))
+	relToAbs := make(map[string]string, len(paths))
+	for _, path := range paths {
+		absPath, absErr := filepath.Abs(path)
+		if absErr != nil {
+			continue
+		}
+
+		relPath, relErr := filepath.Rel(repoRoot, absPath)
+		if relErr != nil {
+			continue
+		}
+
+		cleanRel := filepath.Clean(relPath)
+		pathSpecs = append(pathSpecs, pathSpec{abs: absPath, rel: cleanRel})
+		relToAbs[cleanRel] = absPath
+	}
+
+	if len(pathSpecs) == 0 {
+		return map[string]time.Time{}
+	}
+
+	args := []string{"log", "--diff-filter=A", "--format=__CHAGG_DATE__%aI", "--name-only", "--"}
+	for _, p := range pathSpecs {
+		args = append(args, p.rel)
+	}
+
+	raw, err := runGit(repoRoot, args...)
+	if err != nil {
+		return map[string]time.Time{}
+	}
+
+	result := make(map[string]time.Time)
+	var currentDate time.Time
+	for _, line := range splitLines(raw) {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+
+		if strings.HasPrefix(line, "__CHAGG_DATE__") {
+			dateValue := strings.TrimPrefix(line, "__CHAGG_DATE__")
+			t, parseErr := time.Parse(time.RFC3339, strings.TrimSpace(dateValue))
+			if parseErr != nil {
+				currentDate = time.Time{}
+				continue
+			}
+			currentDate = t
+			continue
+		}
+
+		if currentDate.IsZero() {
+			continue
+		}
+
+		cleanRel := filepath.Clean(filepath.FromSlash(line))
+		absPath, ok := relToAbs[cleanRel]
+		if !ok {
+			continue
+		}
+
+		// Keep the oldest add date by overwriting as git log walks back in time.
+		result[absPath] = currentDate
+	}
+
+	return result
+}
+
 func runGit(dir string, args ...string) (string, error) {
 	cmd := exec.Command("git", args...)
 	cmd.Dir = dir

@@ -4,6 +4,9 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
+	"sort"
+	"strings"
 
 	"github.com/codested/chagg/internal/changeentry"
 	"github.com/urfave/cli/v3"
@@ -31,23 +34,45 @@ func checkAction(ctx context.Context, cmd *cli.Command) error {
 		return err
 	}
 
+	repoRoot, _, err := changeentry.FindGitRoot(cwd)
+	if err != nil {
+		return err
+	}
+
 	if len(results) == 0 {
 		fmt.Println("No change entries found.")
 		return nil
 	}
 
+	sort.SliceStable(results, func(i, j int) bool {
+		moduleI := strings.ToLower(results[i].Module.Name)
+		moduleJ := strings.ToLower(results[j].Module.Name)
+		if moduleI != moduleJ {
+			return moduleI < moduleJ
+		}
+		return results[i].Path < results[j].Path
+	})
+
 	var invalidCount int
+	var validCount int
 	for _, result := range results {
 		moduleText := result.Module.Name
 		if moduleText == "" {
 			moduleText = "default"
 		}
 
+		pathText := result.Path
+		relPath, relErr := filepath.Rel(repoRoot, result.Path)
+		if relErr == nil {
+			pathText = relPath
+		}
+
 		if result.Valid() {
-			fmt.Printf("  ok  [%s] %s\n", moduleText, result.Path)
+			validCount++
+			fmt.Printf("  ok  [%s] %s\n", moduleText, pathText)
 		} else {
 			invalidCount++
-			fmt.Printf("FAIL  [%s] %s\n", moduleText, result.Path)
+			fmt.Printf("FAIL  [%s] %s\n", moduleText, pathText)
 			for _, e := range result.Errors {
 				fmt.Printf("      %s\n", e)
 			}
@@ -55,6 +80,8 @@ func checkAction(ctx context.Context, cmd *cli.Command) error {
 	}
 
 	fmt.Println()
+	fmt.Printf("Checked %d change %s: %d valid, %d invalid.\n",
+		len(results), pluralise(len(results), "entry", "entries"), validCount, invalidCount)
 
 	if invalidCount > 0 {
 		return changeentry.NewValidationError("", fmt.Sprintf("%d of %d change %s invalid",

@@ -114,8 +114,52 @@ func loadEntries(repoRoot string, module changeentry.ModuleConfig, tags []Tag) (
 		return nil, nil, nil
 	}
 
-	var entries []EntryWithMeta
-	var invalidEntries []InvalidEntry
+	paths, err := collectChangeEntryPaths(changesDir)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	addedAtByPath := FileAddedAtMany(repoRoot, paths)
+
+	entries := make([]EntryWithMeta, 0, len(paths))
+	invalidEntries := make([]InvalidEntry, 0)
+	for _, path := range paths {
+		contentBytes, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return nil, nil, fmt.Errorf("read %s: %w", path, readErr)
+		}
+
+		entry, errs := changeentry.ParseEntry(string(contentBytes))
+		if len(errs) > 0 {
+			invalidEntries = append(invalidEntries, InvalidEntry{Path: path, Errors: errs})
+			continue // keep collecting to report all invalid files at once
+		}
+
+		addedAt, hasGit := addedAtByPath[path], false
+		if !addedAt.IsZero() {
+			hasGit = true
+		} else {
+			// Fallback keeps rename-follow behavior for paths not resolved in batch mode.
+			addedAt, hasGit = FileAddedAt(repoRoot, path)
+		}
+
+		version := resolveVersion(entry, addedAt, hasGit, tags)
+
+		entries = append(entries, EntryWithMeta{
+			Entry:   entry,
+			Module:  module,
+			Path:    path,
+			AddedAt: addedAt,
+			HasGit:  hasGit,
+			Version: version,
+		})
+	}
+
+	return entries, invalidEntries, nil
+}
+
+func collectChangeEntryPaths(changesDir string) ([]string, error) {
+	paths := make([]string, 0)
 
 	err := filepath.WalkDir(changesDir, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
@@ -127,34 +171,11 @@ func loadEntries(repoRoot string, module changeentry.ModuleConfig, tags []Tag) (
 		if !strings.HasSuffix(strings.ToLower(d.Name()), ".md") {
 			return nil
 		}
-
-		contentBytes, readErr := os.ReadFile(path)
-		if readErr != nil {
-			return fmt.Errorf("read %s: %w", path, readErr)
-		}
-
-		entry, errs := changeentry.ParseEntry(string(contentBytes))
-		if len(errs) > 0 {
-			invalidEntries = append(invalidEntries, InvalidEntry{Path: path, Errors: errs})
-			return nil // skip invalid entries in log/generate context
-		}
-
-		addedAt, hasGit := FileAddedAt(repoRoot, path)
-		version := resolveVersion(entry, addedAt, hasGit, tags)
-
-		entries = append(entries, EntryWithMeta{
-			Entry:   entry,
-			Module:  module,
-			Path:    path,
-			AddedAt: addedAt,
-			HasGit:  hasGit,
-			Version: version,
-		})
-
+		paths = append(paths, path)
 		return nil
 	})
 
-	return entries, invalidEntries, err
+	return paths, err
 }
 
 func invalidEntriesError(invalidEntries []InvalidEntry) error {

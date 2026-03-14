@@ -15,6 +15,7 @@ import (
 
 type tidyMove struct {
 	ModuleName string
+	ChangesDir string
 	From       string
 	To         string
 }
@@ -77,11 +78,19 @@ func tidyAction(ctx context.Context, cmd *cli.Command) error {
 		return nil
 	}
 
+	touchedChangesDirs := map[string]bool{}
 	for _, move := range moves {
+		touchedChangesDirs[move.ChangesDir] = true
 		if err := applyTidyMove(move); err != nil {
 			return err
 		}
 		fmt.Printf("Moved [%s] %s -> %s\n", move.ModuleName, move.From, move.To)
+	}
+
+	for changesDir := range touchedChangesDirs {
+		if err := pruneEmptyChangeDirectories(changesDir); err != nil {
+			return err
+		}
 	}
 
 	fmt.Printf("Done. Applied %d move%s.\n", len(moves), pluralize(len(moves), "", "s"))
@@ -143,6 +152,7 @@ func planTidyMoves(repoRoot string, changesDirs []string) ([]tidyMove, error) {
 
 					moves = append(moves, tidyMove{
 						ModuleName: module.Name,
+						ChangesDir: module.ChangesDir,
 						From:       entry.Path,
 						To:         to,
 					})
@@ -193,6 +203,43 @@ func applyTidyMove(move tidyMove) error {
 
 	if err := os.Rename(move.From, move.To); err != nil {
 		return err
+	}
+
+	return nil
+}
+
+func pruneEmptyChangeDirectories(changesDir string) error {
+	dirs := make([]string, 0)
+	err := filepath.WalkDir(changesDir, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !d.IsDir() || path == changesDir {
+			return nil
+		}
+		dirs = append(dirs, path)
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	sort.SliceStable(dirs, func(i, j int) bool {
+		return len(dirs[i]) > len(dirs[j])
+	})
+
+	for _, dir := range dirs {
+		removeErr := os.Remove(dir)
+		if removeErr == nil || os.IsNotExist(removeErr) {
+			continue
+		}
+		if pe, ok := removeErr.(*os.PathError); ok {
+			message := strings.ToLower(pe.Err.Error())
+			if strings.Contains(message, "directory not empty") || strings.Contains(message, "not empty") {
+				continue
+			}
+		}
+		return removeErr
 	}
 
 	return nil

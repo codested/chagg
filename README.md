@@ -119,7 +119,8 @@ chagg add prototype/ai-generated-note \
 Validates all change entry files in all discovered `.changes` directories.
 
 - Verifies YAML front matter and supported values.
-- Prints per-file validation results.
+- Prints deterministic, module-grouped per-file validation results using repository-relative paths.
+- Prints a valid/invalid summary.
 - Returns non-zero exit code when invalid entries are found.
 
 ### `chagg log [version]`
@@ -159,6 +160,7 @@ Reorganizes released entries into archive folders without creating commits.
 - `--all`: processes all discovered `.changes` directories in the repo.
 - Released entries are moved to `.changes/archive/<version>/<filename>.md`.
 - Staging entries are left untouched.
+- After `--apply`, empty source directories are pruned automatically.
 
 Examples:
 
