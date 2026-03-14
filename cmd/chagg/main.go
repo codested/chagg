@@ -14,7 +14,7 @@ import (
 func main() {
 	cmd := &cli.Command{
 		Name:  "chagg",
-		Usage: "A modern changelog & release management tool",
+		Usage: "A modern release-note workflow tool",
 		Commands: []*cli.Command{
 			commands.AddCommand(),
 			commands.CheckCommand(),

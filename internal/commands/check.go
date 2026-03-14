@@ -14,16 +14,14 @@ import (
 
 func CheckCommand() *cli.Command {
 	return &cli.Command{
-		Name:   "check",
-		Usage:  "Validate all change entries in every .changes directory",
-		Action: checkAction,
+		Name:    "check",
+		Aliases: []string{"c"},
+		Usage:   "Validate all change entries in every .changes directory",
+		Action:  checkAction,
 	}
 }
 
-func checkAction(ctx context.Context, cmd *cli.Command) error {
-	_ = ctx
-	_ = cmd
-
+func checkAction(_ context.Context, _ *cli.Command) error {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return fmt.Errorf("get working directory: %w", err)

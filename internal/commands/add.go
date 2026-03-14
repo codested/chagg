@@ -30,9 +30,7 @@ func AddCommand() *cli.Command {
 	}
 }
 
-func addAction(ctx context.Context, cmd *cli.Command) error {
-	_ = ctx
-
+func addAction(_ context.Context, cmd *cli.Command) error {
 	params := changeentry.Params{
 		Type:         cmd.String("type"),
 		TypeSet:      cmd.IsSet("type"),

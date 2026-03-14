@@ -2,7 +2,8 @@
 
 `chagg` is a release-note workflow for Git repositories.
 
-Instead of writing changelogs at release time, you collect small change entry files in `.changes/`. `chagg` then validates them, shows release previews, generates Markdown changelogs, and creates the next release tag.
+Instead of writing changelogs at release time, you collect small change entry files in `.changes/`. `chagg` then
+validates them, shows release previews, generates Markdown changelogs, and creates the next release tag.
 
 ## Quick start
 
@@ -31,11 +32,13 @@ For commands that operate on a single working changes directory (for example `ad
 2. Walk upward until an existing `.changes` directory is found.
 3. If none exists, keep walking to `.git` (or filesystem root) and create/use `.changes` there.
 
-For `check`, `chagg` finds the Git root and validates **all** `.changes` directories below it (useful for multi-module repositories).
+For `check`, `chagg` finds the Git root and validates **all** `.changes` directories below it (useful for multi-module
+repositories).
 
 ## Multi-module configuration
 
-For monorepos, add an optional `.chagg.yaml` at the Git root so each `.changes` directory is mapped to a module and tag namespace.
+For monorepos, add an optional `.chagg.yaml` at the Git root so each `.changes` directory is mapped to a module and tag
+namespace.
 
 ```yaml
 modules:
@@ -97,7 +100,8 @@ Creates a new entry file below `.changes`.
 
 - `chagg add auth/token-expiry` -> `.changes/auth/token-expiry.md`
 - Missing directories are created automatically.
-- Supports flags for all entry properties (`--type`, `--breaking`, `--component`, `--audience`, `--priority`, `--issue`, `--release`, `--body`).
+- Supports flags for all entry properties (`--type`, `--breaking`, `--component`, `--audience`, `--priority`, `--issue`,
+  `--release`, `--body`).
 - If a value is not provided via flags, interactive mode prompts for it (required `type` is prompted if missing).
 - If stdin is piped, prompts are skipped (no blocking).
 - `--no-prompt` forces non-interactive mode (recommended for CI and AI tooling).
@@ -154,9 +158,9 @@ Creates the next release tag from current staging changes.
 
 - If no staging changes exist, nothing is tagged.
 - If tags already exist, next SemVer is computed from staging entries:
-  - major: any `breaking: true` or `type: removal`
-  - minor: any `type: feature` (when no major)
-  - patch: otherwise
+    - major: any `breaking: true` or `type: removal`
+    - minor: any `type: feature` (when no major)
+    - patch: otherwise
 - If no SemVer tag exists yet, prompts for the initial version (default `0.1.0`).
 - Tag is created **locally only**. `chagg` prints a copy-paste command to push it.
 - In multi-module mode, created tags are prefixed with module `tagPrefix`.
@@ -165,10 +169,11 @@ Creates the next release tag from current staging changes.
 Suffix handling:
 
 - `--pre <label>` creates/increments pre-release tags for the next core version.
-  - Example: `v1.8.0-beta.1`, then `v1.8.0-beta.2`
+    - Example: `v1.8.0-beta.1`, then `v1.8.0-beta.2`
 - `--build <meta>` appends SemVer build metadata.
-  - Example: `v1.8.0-beta.2+build.42`
-- Baseline bumping uses the latest **stable** tag for the module (pre-release tags do not become baseline automatically).
+    - Example: `v1.8.0-beta.2+build.42`
+- Baseline bumping uses the latest **stable** tag for the module (pre-release tags do not become baseline
+  automatically).
 
 Examples:
 
@@ -189,7 +194,6 @@ chagg add auth/token-fix --type fix --component auth
 
 # 2) validate
 chagg check
-
 
 # 3) preview
 chagg log

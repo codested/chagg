@@ -42,9 +42,7 @@ func LogCommand() *cli.Command {
 	}
 }
 
-func logAction(ctx context.Context, cmd *cli.Command) error {
-	_ = ctx
-
+func logAction(_ context.Context, cmd *cli.Command) error {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return fmt.Errorf("get working directory: %w", err)

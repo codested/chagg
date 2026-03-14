@@ -41,10 +41,7 @@ const (
 	bumpMajor
 )
 
-func releaseAction(ctx context.Context, cmd *cli.Command) error {
-	_ = ctx
-	_ = cmd
-
+func releaseAction(_ context.Context, _ *cli.Command) error {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return fmt.Errorf("get working directory: %w", err)
