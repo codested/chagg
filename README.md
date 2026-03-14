@@ -100,6 +100,7 @@ Creates a new entry file below `.changes`.
 
 - `chagg add auth/token-expiry` -> `.changes/auth/token-expiry.md`
 - Missing directories are created automatically.
+- `.changes/archive/**` is reserved; `chagg add` rejects paths under `archive/`.
 - Supports flags for all entry properties (`--type`, `--breaking`, `--component`, `--audience`, `--priority`, `--issue`, `--release`, `--body`).
 - If a value is not provided via flags, interactive mode prompts for it (required `type` is prompted if missing).
 - If stdin is piped, prompts are skipped (no blocking).
@@ -161,6 +162,7 @@ Reorganizes released entries into archive folders without creating commits.
 - Released entries are moved to `.changes/archive/<version>/<filename>.md`.
 - Staging entries are left untouched.
 - After `--apply`, empty source directories are pruned automatically.
+- Archive entries may be edited in place, but moving them between archive directories is rejected because archive directory history is used for version attribution.
 
 Examples:
 

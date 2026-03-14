@@ -29,6 +29,11 @@ type SemVersion struct {
 	Build      string
 }
 
+type ArchiveDirectoryMove struct {
+	From string
+	To   string
+}
+
 var semverTagPattern = regexp.MustCompile(`^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+([0-9A-Za-z.-]+))?$`)
 
 // ListSemVerTags returns every SemVer tag in the repository at repoRoot,
@@ -331,6 +336,103 @@ func FileAddedAtMany(repoRoot string, paths []string) map[string]time.Time {
 	}
 
 	return result
+}
+
+// FindArchiveDirectoryMoves returns committed rename events where both source
+// and destination are under archiveDir and the parent directory changed.
+// Content edits are not reported.
+func FindArchiveDirectoryMoves(repoRoot string, archiveDir string) ([]ArchiveDirectoryMove, error) {
+	archiveAbs, err := filepath.Abs(archiveDir)
+	if err != nil {
+		return nil, err
+	}
+
+	repoAbs, err := filepath.Abs(repoRoot)
+	if err != nil {
+		return nil, err
+	}
+
+	archiveRel, err := filepath.Rel(repoAbs, archiveAbs)
+	if err != nil {
+		return nil, err
+	}
+	archiveRel = filepath.Clean(archiveRel)
+
+	raw, err := runGit(repoAbs, "log", "--name-status", "--find-renames", "--format=", "--", archiveRel)
+	if err != nil {
+		return nil, err
+	}
+
+	moves := make([]ArchiveDirectoryMove, 0)
+	seen := map[string]bool{}
+	for _, line := range splitLines(raw) {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+
+		status, from, to, ok := parseRenameStatusLine(line)
+		if !ok || !strings.HasPrefix(status, "R") {
+			continue
+		}
+
+		cleanFrom := filepath.Clean(filepath.FromSlash(from))
+		cleanTo := filepath.Clean(filepath.FromSlash(to))
+		if !isUnderPath(cleanFrom, archiveRel) || !isUnderPath(cleanTo, archiveRel) {
+			continue
+		}
+
+		if filepath.Dir(cleanFrom) == filepath.Dir(cleanTo) {
+			continue
+		}
+
+		key := cleanFrom + "->" + cleanTo
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		moves = append(moves, ArchiveDirectoryMove{From: cleanFrom, To: cleanTo})
+	}
+
+	sort.SliceStable(moves, func(i, j int) bool {
+		if moves[i].From != moves[j].From {
+			return moves[i].From < moves[j].From
+		}
+		return moves[i].To < moves[j].To
+	})
+
+	return moves, nil
+}
+
+func parseRenameStatusLine(line string) (string, string, string, bool) {
+	parts := strings.Split(line, "\t")
+	if len(parts) < 3 {
+		return "", "", "", false
+	}
+
+	status := strings.TrimSpace(parts[0])
+	if status == "" {
+		return "", "", "", false
+	}
+
+	from := strings.TrimSpace(parts[1])
+	to := strings.TrimSpace(parts[2])
+	if from == "" || to == "" {
+		return "", "", "", false
+	}
+
+	return status, from, to, true
+}
+
+func isUnderPath(path string, root string) bool {
+	cleanPath := filepath.Clean(path)
+	cleanRoot := filepath.Clean(root)
+	if cleanPath == cleanRoot {
+		return true
+	}
+
+	prefix := cleanRoot + string(filepath.Separator)
+	return strings.HasPrefix(cleanPath, prefix)
 }
 
 func runGit(dir string, args ...string) (string, error) {

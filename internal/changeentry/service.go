@@ -160,11 +160,24 @@ func BuildChangeFilePath(changesDir string, targetArg string) (string, error) {
 		return "", NewValidationError("path", fmt.Sprintf("target path must not escape .changes: %s", targetArg))
 	}
 
+	if isReservedArchiveSubpath(clean) {
+		return "", NewValidationError("path", "target path must not write under reserved .changes/archive")
+	}
+
 	if !strings.HasSuffix(strings.ToLower(clean), ".md") {
 		clean += ".md"
 	}
 
 	return filepath.Join(changesDir, clean), nil
+}
+
+func isReservedArchiveSubpath(path string) bool {
+	parts := strings.Split(filepath.Clean(path), string(filepath.Separator))
+	if len(parts) < 2 {
+		return false
+	}
+
+	return strings.EqualFold(parts[0], "archive")
 }
 
 func collectEntry(params Params, reader *bufio.Reader, output io.Writer, interactive bool) (Entry, error) {

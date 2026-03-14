@@ -86,6 +86,38 @@ func TestBuildChangeFilePathDoesNotDuplicateExtension(t *testing.T) {
 	}
 }
 
+func TestBuildChangeFilePathRejectsArchiveSubpaths(t *testing.T) {
+	tempDir := t.TempDir()
+
+	_, err := BuildChangeFilePath(tempDir, "archive/v1.0.0/entry")
+	if err == nil {
+		t.Fatalf("expected error")
+	}
+
+	var validationErr *ValidationError
+	if !errors.As(err, &validationErr) {
+		t.Fatalf("expected ValidationError, got %T", err)
+	}
+
+	if validationErr.Field != "path" {
+		t.Fatalf("expected field path, got %q", validationErr.Field)
+	}
+}
+
+func TestBuildChangeFilePathAllowsArchiveFileNameAtRoot(t *testing.T) {
+	tempDir := t.TempDir()
+
+	resolved, err := BuildChangeFilePath(tempDir, "archive")
+	if err != nil {
+		t.Fatalf("BuildChangeFilePath returned error: %v", err)
+	}
+
+	expected := filepath.Join(tempDir, "archive.md")
+	if resolved != expected {
+		t.Fatalf("expected %q, got %q", expected, resolved)
+	}
+}
+
 func TestNormalizeTypeAlias(t *testing.T) {
 	normalized, err := NormalizeType("feat")
 	if err != nil {
@@ -237,6 +269,30 @@ func TestCreateChangeCreatesTargetFileUnderChangesDirectory(t *testing.T) {
 	content := string(contentBytes)
 	if !strings.Contains(content, "type: fix") {
 		t.Fatalf("expected rendered entry to contain type, got:\n%s", content)
+	}
+}
+
+func TestCreateChangeRejectsReservedArchiveSubpath(t *testing.T) {
+	tempDir := t.TempDir()
+	repoDir := filepath.Join(tempDir, "repo")
+
+	if err := os.MkdirAll(filepath.Join(repoDir, ".git"), 0o755); err != nil {
+		t.Fatalf("mkdir .git: %v", err)
+	}
+
+	params := Params{Type: "fix", TypeSet: true}
+	_, err := CreateChange(repoDir, "archive/v1.0.0/entry", params, strings.NewReader(""), bytes.NewBuffer(nil), false)
+	if err == nil {
+		t.Fatalf("expected error")
+	}
+
+	var validationErr *ValidationError
+	if !errors.As(err, &validationErr) {
+		t.Fatalf("expected ValidationError, got %T", err)
+	}
+
+	if validationErr.Field != "path" {
+		t.Fatalf("expected field path, got %q", validationErr.Field)
 	}
 }
 

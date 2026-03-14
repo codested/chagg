@@ -38,6 +38,10 @@ var typeTitles = map[changeentry.ChangeType]string{
 func LoadChangeLog(repoRoot string, module changeentry.ModuleConfig, filter FilterOptions) (*ChangeLog, error) {
 	tags, _ := ListSemVerTags(repoRoot, module.TagPrefix) // non-fatal; proceed without history
 
+	if err := validateArchiveDirectoryIntegrity(repoRoot, module); err != nil {
+		return nil, err
+	}
+
 	entries, invalidEntries, err := loadEntries(repoRoot, module, tags)
 	if err != nil {
 		return nil, err
@@ -60,6 +64,40 @@ func LoadChangeLog(repoRoot string, module changeentry.ModuleConfig, filter Filt
 	cl.Module = module
 	cl.InvalidEntries = invalidEntries
 	return cl, nil
+}
+
+func validateArchiveDirectoryIntegrity(repoRoot string, module changeentry.ModuleConfig) error {
+	archiveRoot := filepath.Join(module.ChangesDir, "archive")
+	if _, statErr := os.Stat(archiveRoot); os.IsNotExist(statErr) {
+		return nil
+	}
+
+	moves, err := FindArchiveDirectoryMoves(repoRoot, archiveRoot)
+	if err != nil {
+		return nil // keep behavior non-fatal when git history is unavailable
+	}
+
+	if len(moves) == 0 {
+		return nil
+	}
+
+	maxExamples := 3
+	if len(moves) < maxExamples {
+		maxExamples = len(moves)
+	}
+	examples := make([]string, 0, maxExamples)
+	for i := 0; i < maxExamples; i++ {
+		examples = append(examples, fmt.Sprintf("%s -> %s", moves[i].From, moves[i].To))
+	}
+
+	message := fmt.Sprintf(
+		"archived files must stay in their original archive directory; found %d cross-directory move%s (for example: %s)",
+		len(moves),
+		pluralizeCount(len(moves), "", "s"),
+		strings.Join(examples, "; "),
+	)
+
+	return changeentry.NewValidationError("archive", message)
 }
 
 // StagingOnly returns a changelog that contains only the staging group.
