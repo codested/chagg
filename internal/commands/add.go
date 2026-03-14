@@ -14,7 +14,7 @@ func AddCommand() *cli.Command {
 		Name:      "add",
 		Aliases:   []string{"a"},
 		Usage:     "Create a new change entry",
-		ArgsUsage: "<path>",
+		ArgsUsage: "[path]",
 		Flags: []cli.Flag{
 			&cli.StringFlag{Name: "type", Usage: changeentry.TypeFlagUsage()},
 			&cli.BoolFlag{Name: "breaking", Usage: "Mark this entry as breaking"},

@@ -243,3 +243,56 @@ func TestCreateChangeReturnsValidationErrorWithoutPromptInNonInteractiveMode(t *
 		t.Fatalf("expected no interactive prompt in non-interactive mode, got output: %q", output.String())
 	}
 }
+
+func TestCreateChangePromptsForPathWhenMissingInInteractiveMode(t *testing.T) {
+	tempDir := t.TempDir()
+	repoDir := filepath.Join(tempDir, "repo")
+
+	if err := os.MkdirAll(filepath.Join(repoDir, ".git"), 0o755); err != nil {
+		t.Fatalf("mkdir .git: %v", err)
+	}
+
+	params := Params{Type: "fix", TypeSet: true}
+	output := bytes.NewBuffer(nil)
+
+	path, err := CreateChange(repoDir, "", params, strings.NewReader("auth/token\n"), output, true)
+	if err != nil {
+		t.Fatalf("CreateChange returned error: %v", err)
+	}
+
+	expected := filepath.Join(repoDir, ".changes", "auth", "token.md")
+	if path != expected {
+		t.Fatalf("expected %q, got %q", expected, path)
+	}
+
+	if _, statErr := os.Stat(path); statErr != nil {
+		t.Fatalf("expected file to exist at %q: %v", path, statErr)
+	}
+
+	if !strings.Contains(output.String(), "Path (example: auth/new-login): ") {
+		t.Fatalf("expected path prompt in output, got %q", output.String())
+	}
+}
+
+func TestCreateChangeReturnsValidationErrorWhenPathMissingNonInteractive(t *testing.T) {
+	tempDir := t.TempDir()
+	repoDir := filepath.Join(tempDir, "repo")
+
+	if err := os.MkdirAll(filepath.Join(repoDir, ".git"), 0o755); err != nil {
+		t.Fatalf("mkdir .git: %v", err)
+	}
+
+	_, err := CreateChange(repoDir, "", Params{Type: "fix", TypeSet: true}, strings.NewReader(""), bytes.NewBuffer(nil), false)
+	if err == nil {
+		t.Fatalf("expected error")
+	}
+
+	var validationErr *ValidationError
+	if !errors.As(err, &validationErr) {
+		t.Fatalf("expected ValidationError, got %T", err)
+	}
+
+	if !strings.Contains(validationErr.Error(), "path") {
+		t.Fatalf("expected path validation error, got %q", validationErr.Error())
+	}
+}

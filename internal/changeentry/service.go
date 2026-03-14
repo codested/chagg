@@ -42,9 +42,11 @@ type Params struct {
 }
 
 func CreateChange(startPath string, targetArg string, params Params, input io.Reader, output io.Writer, interactive bool) (string, error) {
-	targetArg = strings.TrimSpace(targetArg)
-	if targetArg == "" {
-		return "", NewValidationError("path", "missing target path (example: chagg add auth/new-login)")
+	reader := bufio.NewReader(input)
+
+	resolvedTargetArg, err := resolveTargetPathArg(targetArg, reader, output, interactive)
+	if err != nil {
+		return "", err
 	}
 
 	changesDir, err := ResolveChangesDirectory(startPath)
@@ -52,7 +54,7 @@ func CreateChange(startPath string, targetArg string, params Params, input io.Re
 		return "", err
 	}
 
-	targetPath, err := BuildChangeFilePath(changesDir, targetArg)
+	targetPath, err := BuildChangeFilePath(changesDir, resolvedTargetArg)
 	if err != nil {
 		return "", err
 	}
@@ -67,7 +69,7 @@ func CreateChange(startPath string, targetArg string, params Params, input io.Re
 		return "", err
 	}
 
-	entry, err := collectEntry(params, bufio.NewReader(input), output, interactive)
+	entry, err := collectEntry(params, reader, output, interactive)
 	if err != nil {
 		return "", err
 	}
@@ -82,6 +84,31 @@ func CreateChange(startPath string, targetArg string, params Params, input io.Re
 	}
 
 	return targetPath, nil
+}
+
+func resolveTargetPathArg(targetArg string, reader *bufio.Reader, output io.Writer, interactive bool) (string, error) {
+	trimmedTarget := strings.TrimSpace(targetArg)
+	if trimmedTarget != "" {
+		return trimmedTarget, nil
+	}
+
+	if !interactive {
+		return "", NewValidationError("path", "missing target path (example: chagg add auth/new-login)")
+	}
+
+	for {
+		value, err := promptString(reader, output, "Path (example: auth/new-login): ", "")
+		if err != nil {
+			return "", err
+		}
+
+		if strings.TrimSpace(value) == "" {
+			_, _ = fmt.Fprintln(output, "Path is required")
+			continue
+		}
+
+		return value, nil
+	}
 }
 
 func ResolveChangesDirectory(startPath string) (string, error) {
