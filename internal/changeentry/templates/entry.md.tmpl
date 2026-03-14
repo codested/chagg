@@ -1,0 +1,22 @@
+---
+type: {{ .Type }}
+{{- if .Breaking }}
+breaking: true
+{{- end }}
+{{- if gt (len .Component) 0 }}
+{{ yamlField "component" .Component }}{{- end }}
+{{- if .ShowAudience }}
+{{ yamlField "audience" .Audience }}{{- end }}
+{{- if .ShowPriority }}
+priority: {{ .Priority }}
+{{- end }}
+{{- if gt (len .Issue) 0 }}
+{{ yamlField "issue" .Issue }}{{- end }}
+{{- if .Release }}
+release: {{ .Release }}
+{{- end }}
+---
+
+{{- if .Body }}
+{{ .Body }}
+{{- end }}
