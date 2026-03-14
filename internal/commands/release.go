@@ -86,10 +86,10 @@ func releaseAction(_ context.Context, cmd *cli.Command) error {
 	}
 
 	if mode.willCreateTag && !module.GitWrite.AllowsReleaseTag() {
-		return changeentry.NewValidationError("config", "release tag creation is disabled by gitWrite policy")
+		return changeentry.NewValidationError("config", "release tag creation is disabled by git-write policy")
 	}
 	if mode.pushTag && !module.GitWrite.AllowsReleasePush() {
-		return changeentry.NewValidationError("config", "release tag push is disabled by gitWrite policy")
+		return changeentry.NewValidationError("config", "release tag push is disabled by git-write policy")
 	}
 
 	cl, err := changelog.LoadChangeLog(repoRoot, module, changelog.FilterOptions{})

@@ -2,8 +2,6 @@ package commands
 
 import (
 	"testing"
-
-	"github.com/codested/chagg/internal/changeentry"
 )
 
 func TestAddCommandContainsExpectedNameAndAlias(t *testing.T) {
@@ -22,15 +20,15 @@ func TestAddCommandContainsExpectedNameAndAlias(t *testing.T) {
 	}
 }
 
-func TestResolveGitAddBehaviorDefaultsToModuleConfig(t *testing.T) {
+func TestResolveGitAddBehaviorDefaultsToAutoStageEnabled(t *testing.T) {
 	cmd := AddCommand()
 
-	value, err := resolveGitAddBehavior(cmd, changeentry.ModuleConfig{Defaults: changeentry.ModuleDefaults{AutoAddToGit: true}})
+	value, err := resolveGitAddBehavior(cmd)
 	if err != nil {
 		t.Fatalf("resolveGitAddBehavior returned error: %v", err)
 	}
 	if !value {
-		t.Fatalf("expected module default true")
+		t.Fatalf("expected default auto-stage true")
 	}
 }
 
@@ -40,7 +38,7 @@ func TestResolveGitAddBehaviorNoGitAddOverridesDefault(t *testing.T) {
 		t.Fatalf("set flag: %v", err)
 	}
 
-	value, err := resolveGitAddBehavior(cmd, changeentry.ModuleConfig{Defaults: changeentry.ModuleDefaults{AutoAddToGit: true}})
+	value, err := resolveGitAddBehavior(cmd)
 	if err != nil {
 		t.Fatalf("resolveGitAddBehavior returned error: %v", err)
 	}

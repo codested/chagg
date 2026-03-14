@@ -56,12 +56,12 @@ func addAction(_ context.Context, cmd *cli.Command) error {
 		return err
 	}
 
-	shouldGitAdd, err := resolveGitAddBehavior(cmd, module)
+	shouldGitAdd, err := resolveGitAddBehavior(cmd)
 	if err != nil {
 		return err
 	}
 	if shouldGitAdd && !module.GitWrite.AllowsAdd() {
-		return changeentry.NewValidationError("config", "git add is disabled by gitWrite policy")
+		return changeentry.NewValidationError("config", "git add is disabled by git-write policy")
 	}
 
 	params := changeentry.Params{
@@ -102,7 +102,7 @@ func addAction(_ context.Context, cmd *cli.Command) error {
 	return nil
 }
 
-func resolveGitAddBehavior(cmd *cli.Command, module changeentry.ModuleConfig) (bool, error) {
+func resolveGitAddBehavior(cmd *cli.Command) (bool, error) {
 	if cmd.IsSet("git-add") && cmd.IsSet("no-git-add") {
 		if cmd.Bool("git-add") == cmd.Bool("no-git-add") {
 			return false, changeentry.NewValidationError("flags", "--git-add and --no-git-add cannot be used together")
@@ -117,7 +117,7 @@ func resolveGitAddBehavior(cmd *cli.Command, module changeentry.ModuleConfig) (b
 		return cmd.Bool("git-add"), nil
 	}
 
-	return module.Defaults.AutoAddToGit, nil
+	return true, nil
 }
 
 func gitAddPath(repoRoot string, path string) error {

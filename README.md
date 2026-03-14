@@ -37,52 +37,46 @@ repositories).
 
 ## Multi-module configuration
 
-For monorepos, add an optional `.chagg.yaml` at the Git root so each `.changes` directory is mapped to a module and tag
-namespace.
+For monorepos, add an optional `.chagg.yaml` at the Git root to override module names/tag prefixes when needed.
 
 ```yaml
 modules:
   - name: msal-browser
-    changesDir: lib/msal-browser/.changes
-    tagPrefix: msal-browser/
+    changes-dir: lib/msal-browser/.changes
+    tag-prefix: msal-browser-
   - name: msal-node
-    changesDir: lib/msal-node/.changes
-    tagPrefix: msal-node/
+    changes-dir: lib/msal-node/.changes
+    tag-prefix: msal-node-
 ```
 
 Rules:
 
-- `changesDir` is relative to repo root.
-- `tagPrefix` is prepended when tags are read/created (for example `msal-browser/v1.4.0`).
-- If `.chagg.yaml` exists, discovered `.changes` directories must be declared in the file.
-- If config is missing, `chagg` falls back to single-module defaults.
+- `changes-dir` is relative to repo root.
+- `tag-prefix` is prepended when tags are read/created (for example `msal-browser-1.4.0`).
+- `name` and `tag-prefix` are optional; when omitted they are inferred from the parent directory of `changes-dir`.
+- Without config, `chagg` also infers modules from discovered `.changes` directories using the parent directory name.
+- For repo-root `.changes`, the inferred `tag-prefix` is empty.
+- If two discovered `.changes` directories infer the same module name, commands fail until you disambiguate with explicit `modules` entries.
 - Supported config file names at repo root: `.chagg.yaml`, `.chagg.yml`, `chagg.yml`.
 
-Optional defaults/policies:
+Optional global git-write policy:
 
 ```yaml
-defaults:
-  autoAddToGit: true
-gitWrite:
-  enabled: true
-  add: true
-  releaseTag: true
-  releasePush: true
-
-modules:
-  - name: msal-browser
-    changesDir: lib/msal-browser/.changes
-    tagPrefix: msal-browser/
-    defaults:
-      autoAddToGit: true
-    gitWrite:
-      releasePush: false
+git-write:
+  allow: false
+```
+```yaml
+# OR granular controls:
+git-write:
+  allow:
+    add-change: true
+    push-release-tag: false
 ```
 
-- `defaults.autoAddToGit`: default behavior for `chagg add` staging (`git add`) the new file.
-- `gitWrite.enabled`: global kill-switch for write operations.
-- `gitWrite.add`, `gitWrite.releaseTag`, `gitWrite.releasePush`: granular write permissions.
-- Module-level `defaults` and `gitWrite` override global values.
+- `git-write.allow`: global kill-switch for write operations.
+- `git-write.allow.add-change`: allow/disallow staging new change files.
+- `git-write.allow.push-release-tag`: allow/disallow automatic `chagg release --push`.
+- Omit `git-write` entirely to use built-in defaults (all allowed).
 
 ## Change entry format
 
@@ -129,7 +123,7 @@ Creates a new entry file below `.changes`.
 - Missing directories are created automatically.
 - Supports flags for all entry properties (`--type`, `--breaking`, `--component`, `--audience`, `--priority`, `--issue`,
   `--release`, `--body`).
-- By default, new files are staged automatically (`git add`) after creation.
+- By default, new files are staged automatically (`git add`) after creation (built-in default).
 - Use `--no-git-add` to skip staging, or `--git-add` to force staging explicitly.
 - If a value is not provided via flags, interactive mode prompts for it (required `type` is prompted if missing).
 - If stdin is piped, prompts are skipped (no blocking).
@@ -198,7 +192,7 @@ Creates the next release tag from current staging changes.
 - `--push`: pushes the newly created tag to `origin` automatically.
 - In multi-module mode, created tags are prefixed with module `tagPrefix`.
 - Release requires a clean Git working tree (no staged/unstaged/untracked changes).
-- Git write operations are gated by `gitWrite` policy from config.
+- Git write operations are gated by global `git-write` policy from config.
 
 Suffix handling:
 

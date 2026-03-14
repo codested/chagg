@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -16,12 +17,7 @@ type ModuleConfig struct {
 	Name       string
 	ChangesDir string
 	TagPrefix  string
-	Defaults   ModuleDefaults
 	GitWrite   GitWritePolicy
-}
-
-type ModuleDefaults struct {
-	AutoAddToGit bool
 }
 
 type GitWritePolicy struct {
@@ -29,10 +25,6 @@ type GitWritePolicy struct {
 	Add         bool
 	ReleaseTag  bool
 	ReleasePush bool
-}
-
-func defaultModuleDefaults() ModuleDefaults {
-	return ModuleDefaults{AutoAddToGit: true}
 }
 
 func defaultGitWritePolicy() GitWritePolicy {
@@ -57,28 +49,60 @@ func (p GitWritePolicy) AllowsReleasePush() bool {
 }
 
 type configFile struct {
-	Defaults ModuleDefaultsConfig `yaml:"defaults"`
-	GitWrite GitWriteConfig       `yaml:"gitWrite"`
-	Modules  []configModule       `yaml:"modules"`
+	GitWrite GitWriteConfig `yaml:"git-write"`
+	Modules  []configModule `yaml:"modules"`
 }
 
 type configModule struct {
-	Name       string               `yaml:"name"`
-	ChangesDir string               `yaml:"changesDir"`
-	TagPrefix  string               `yaml:"tagPrefix"`
-	Defaults   ModuleDefaultsConfig `yaml:"defaults"`
-	GitWrite   GitWriteConfig       `yaml:"gitWrite"`
-}
-
-type ModuleDefaultsConfig struct {
-	AutoAddToGit *bool `yaml:"autoAddToGit"`
+	Name       string `yaml:"name"`
+	ChangesDir string `yaml:"changes-dir"`
+	TagPrefix  string `yaml:"tag-prefix"`
 }
 
 type GitWriteConfig struct {
-	Enabled     *bool `yaml:"enabled"`
-	Add         *bool `yaml:"add"`
-	ReleaseTag  *bool `yaml:"releaseTag"`
-	ReleasePush *bool `yaml:"releasePush"`
+	Allow GitWriteAllowConfig `yaml:"allow"`
+}
+
+// GitWriteAllowConfig accepts either:
+//   - allow: true|false
+//   - allow:
+//     add-change: true|false
+//     push-release-tag: true|false
+type GitWriteAllowConfig struct {
+	IsSet          bool
+	Value          bool
+	AddChange      *bool
+	PushReleaseTag *bool
+}
+
+func (c *GitWriteAllowConfig) UnmarshalYAML(node *yaml.Node) error {
+	c.IsSet = true
+
+	if node.Kind == yaml.ScalarNode {
+		var value bool
+		if err := node.Decode(&value); err != nil {
+			return err
+		}
+		c.Value = value
+		return nil
+	}
+
+	if node.Kind == yaml.MappingNode {
+		var value struct {
+			AddChange      *bool `yaml:"add-change"`
+			PushReleaseTag *bool `yaml:"push-release-tag"`
+		}
+		if err := node.Decode(&value); err != nil {
+			return err
+		}
+
+		c.Value = true
+		c.AddChange = value.AddChange
+		c.PushReleaseTag = value.PushReleaseTag
+		return nil
+	}
+
+	return fmt.Errorf("allow must be a boolean or object")
 }
 
 // ResolveModuleForChangesDir returns module configuration for the target changes directory.
@@ -102,6 +126,17 @@ func ResolveModuleForChangesDir(repoRoot string, changesDir string) (ModuleConfi
 
 	if hasConfig {
 		return ModuleConfig{}, NewValidationError("config", fmt.Sprintf("no module in %s matches changes directory %s", configName, absChangesDir))
+	}
+
+	discoveredDirs, discoverErr := FindAllChangesDirs(repoRoot)
+	if discoverErr != nil {
+		return ModuleConfig{}, discoverErr
+	}
+	if !containsSamePath(discoveredDirs, absChangesDir) {
+		discoveredDirs = append(discoveredDirs, absChangesDir)
+	}
+	if collisionErr := validateInferredModuleNames(repoRoot, discoveredDirs); collisionErr != nil {
+		return ModuleConfig{}, collisionErr
 	}
 
 	return defaultModuleForChangesDir(repoRoot, absChangesDir), nil
@@ -142,6 +177,12 @@ func ResolveModulesForChangesDirs(repoRoot string, changesDirs []string) (map[st
 		result[changesDir] = defaultModuleForChangesDir(repoRoot, absChangesDir)
 	}
 
+	if !hasConfig {
+		if collisionErr := validateInferredModuleNames(repoRoot, changesDirs); collisionErr != nil {
+			return nil, collisionErr
+		}
+	}
+
 	return result, nil
 }
 
@@ -164,7 +205,6 @@ func loadModules(repoRoot string) ([]ModuleConfig, bool, string, error) {
 		return nil, true, filepath.Base(configPath), NewValidationError("config", fmt.Sprintf("invalid %s: %s", filepath.Base(configPath), err))
 	}
 
-	globalDefaults := applyDefaultsConfig(defaultModuleDefaults(), file.Defaults)
 	globalGitWrite := applyGitWriteConfig(defaultGitWritePolicy(), file.GitWrite)
 
 	modules := make([]ModuleConfig, 0, len(file.Modules))
@@ -172,38 +212,39 @@ func loadModules(repoRoot string) ([]ModuleConfig, bool, string, error) {
 	seenDirs := map[string]bool{}
 
 	for index, module := range file.Modules {
+		changesDirRaw := strings.TrimSpace(module.ChangesDir)
+		if changesDirRaw == "" {
+			return nil, true, filepath.Base(configPath), NewValidationError("config", fmt.Sprintf("modules[%d].changes-dir is required", index))
+		}
+
+		cleanChangesDir := filepath.Clean(changesDirRaw)
+		if filepath.IsAbs(cleanChangesDir) {
+			return nil, true, filepath.Base(configPath), NewValidationError("config", fmt.Sprintf("modules[%d].changes-dir must be relative", index))
+		}
+
+		changesDirPath := filepath.Join(repoRoot, cleanChangesDir)
+		if seenDirs[strings.ToLower(changesDirPath)] {
+			return nil, true, filepath.Base(configPath), NewValidationError("config", fmt.Sprintf("duplicate module changes-dir %q", changesDirRaw))
+		}
+
+		inferredName, inferredTagPrefix := inferModuleIdentity(repoRoot, changesDirPath)
 		name := strings.TrimSpace(module.Name)
 		if name == "" {
-			return nil, true, filepath.Base(configPath), NewValidationError("config", fmt.Sprintf("modules[%d].name is required", index))
+			name = inferredName
 		}
 		if seenNames[strings.ToLower(name)] {
 			return nil, true, filepath.Base(configPath), NewValidationError("config", fmt.Sprintf("duplicate module name %q", name))
 		}
 
-		changesDirRaw := strings.TrimSpace(module.ChangesDir)
-		if changesDirRaw == "" {
-			return nil, true, filepath.Base(configPath), NewValidationError("config", fmt.Sprintf("modules[%d].changesDir is required", index))
-		}
-
-		cleanChangesDir := filepath.Clean(changesDirRaw)
-		if filepath.IsAbs(cleanChangesDir) {
-			return nil, true, filepath.Base(configPath), NewValidationError("config", fmt.Sprintf("modules[%d].changesDir must be relative", index))
-		}
-
-		changesDirPath := filepath.Join(repoRoot, cleanChangesDir)
-		if seenDirs[strings.ToLower(changesDirPath)] {
-			return nil, true, filepath.Base(configPath), NewValidationError("config", fmt.Sprintf("duplicate module changesDir %q", changesDirRaw))
-		}
-
 		tagPrefix := strings.TrimSpace(module.TagPrefix)
-		resolvedDefaults := applyDefaultsConfig(globalDefaults, module.Defaults)
-		resolvedGitWrite := applyGitWriteConfig(globalGitWrite, module.GitWrite)
+		if tagPrefix == "" {
+			tagPrefix = inferredTagPrefix
+		}
 		modules = append(modules, ModuleConfig{
 			Name:       name,
 			ChangesDir: changesDirPath,
 			TagPrefix:  tagPrefix,
-			Defaults:   resolvedDefaults,
-			GitWrite:   resolvedGitWrite,
+			GitWrite:   globalGitWrite,
 		})
 		seenNames[strings.ToLower(name)] = true
 		seenDirs[strings.ToLower(changesDirPath)] = true
@@ -239,53 +280,103 @@ func resolveConfigPath(repoRoot string) (string, bool, error) {
 	return found[0], true, nil
 }
 
-func applyDefaultsConfig(base ModuleDefaults, overrides ModuleDefaultsConfig) ModuleDefaults {
-	result := base
-	if overrides.AutoAddToGit != nil {
-		result.AutoAddToGit = *overrides.AutoAddToGit
-	}
-
-	return result
-}
-
 func applyGitWriteConfig(base GitWritePolicy, overrides GitWriteConfig) GitWritePolicy {
 	result := base
-	if overrides.Enabled != nil {
-		result.Enabled = *overrides.Enabled
+	if !overrides.Allow.IsSet {
+		return result
 	}
-	if overrides.Add != nil {
-		result.Add = *overrides.Add
+
+	if overrides.Allow.AddChange == nil && overrides.Allow.PushReleaseTag == nil {
+		result.Enabled = overrides.Allow.Value
+		result.Add = overrides.Allow.Value
+		result.ReleaseTag = overrides.Allow.Value
+		result.ReleasePush = overrides.Allow.Value
+		return result
 	}
-	if overrides.ReleaseTag != nil {
-		result.ReleaseTag = *overrides.ReleaseTag
+
+	result.Enabled = true
+	result.ReleaseTag = true
+	if overrides.Allow.AddChange != nil {
+		result.Add = *overrides.Allow.AddChange
 	}
-	if overrides.ReleasePush != nil {
-		result.ReleasePush = *overrides.ReleasePush
+	if overrides.Allow.PushReleaseTag != nil {
+		result.ReleasePush = *overrides.Allow.PushReleaseTag
 	}
 
 	return result
 }
 
 func defaultModuleForChangesDir(repoRoot string, changesDir string) ModuleConfig {
-	relPath, err := filepath.Rel(repoRoot, changesDir)
-	if err != nil {
-		relPath = ".changes"
-	}
-
-	name := strings.TrimSuffix(relPath, string(filepath.Separator)+".changes")
-	name = strings.TrimSuffix(name, ".changes")
-	name = strings.Trim(name, string(filepath.Separator))
-	if name == "" {
-		name = "default"
-	}
-	name = strings.ReplaceAll(name, string(filepath.Separator), "-")
+	name, tagPrefix := inferModuleIdentity(repoRoot, changesDir)
 
 	return ModuleConfig{
 		Name:       name,
 		ChangesDir: changesDir,
-		Defaults:   defaultModuleDefaults(),
+		TagPrefix:  tagPrefix,
 		GitWrite:   defaultGitWritePolicy(),
 	}
+}
+
+func inferModuleIdentity(repoRoot, changesDir string) (string, string) {
+	rootChangesDir := filepath.Join(repoRoot, ".changes")
+	if samePath(rootChangesDir, changesDir) {
+		repoBase := filepath.Base(filepath.Clean(repoRoot))
+		if repoBase == "" || repoBase == "." || repoBase == string(filepath.Separator) {
+			repoBase = "default"
+		}
+		return repoBase, ""
+	}
+
+	parent := filepath.Base(filepath.Dir(changesDir))
+	if parent == "" || parent == "." || parent == string(filepath.Separator) {
+		parent = "default"
+	}
+
+	return parent, parent + "-"
+}
+
+func validateInferredModuleNames(repoRoot string, changesDirs []string) error {
+	namesToDirs := map[string][]string{}
+	for _, changesDir := range changesDirs {
+		absChangesDir, err := filepath.Abs(changesDir)
+		if err != nil {
+			return err
+		}
+
+		name, _ := inferModuleIdentity(repoRoot, absChangesDir)
+		key := strings.ToLower(name)
+		namesToDirs[key] = append(namesToDirs[key], absChangesDir)
+	}
+
+	collisions := make([]string, 0)
+	for key, dirs := range namesToDirs {
+		if len(dirs) <= 1 {
+			continue
+		}
+
+		sort.Strings(dirs)
+		collisions = append(collisions, fmt.Sprintf("%s (%s)", key, strings.Join(dirs, ", ")))
+	}
+
+	if len(collisions) == 0 {
+		return nil
+	}
+
+	sort.Strings(collisions)
+	return NewValidationError(
+		"config",
+		fmt.Sprintf("inferred module name collision detected: %s. Define explicit modules in config with unique names/tag-prefixes", strings.Join(collisions, "; ")),
+	)
+}
+
+func containsSamePath(paths []string, target string) bool {
+	for _, path := range paths {
+		if samePath(path, target) {
+			return true
+		}
+	}
+
+	return false
 }
 
 func samePath(a string, b string) bool {
