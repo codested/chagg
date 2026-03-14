@@ -182,6 +182,26 @@ func TestRenderEntryKeepsBlankLineBetweenHeaderAndBody(t *testing.T) {
 	}
 }
 
+func TestRenderEntryPlacesClosingDelimiterOnSeparateLine(t *testing.T) {
+	entry := Entry{
+		Type: ChangeTypeFix,
+		Body: "Body line",
+	}
+
+	rendered, err := RenderEntry(entry)
+	if err != nil {
+		t.Fatalf("RenderEntry returned error: %v", err)
+	}
+
+	if strings.Contains(rendered, "type: fix---") {
+		t.Fatalf("expected closing delimiter not to be concatenated with type, got:\n%s", rendered)
+	}
+
+	if !strings.Contains(rendered, "---\n\nBody line") {
+		t.Fatalf("expected body to start after closing delimiter and one blank line, got:\n%s", rendered)
+	}
+}
+
 func TestCreateChangeCreatesTargetFileUnderChangesDirectory(t *testing.T) {
 	tempDir := t.TempDir()
 	repoDir := filepath.Join(tempDir, "repo")
