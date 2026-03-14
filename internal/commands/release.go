@@ -20,6 +20,18 @@ func ReleaseCommand() *cli.Command {
 		Aliases: []string{"r", "release"},
 		Usage:   "Create the next release tag from staging changes",
 		Flags: []cli.Flag{
+			&cli.BoolFlag{
+				Name:  "dry-run",
+				Usage: "Compute the next version without creating a tag",
+			},
+			&cli.BoolFlag{
+				Name:  "version-only",
+				Usage: "Print only the computed version and exit",
+			},
+			&cli.BoolFlag{
+				Name:  "push",
+				Usage: "Push the created tag to origin",
+			},
 			&cli.StringFlag{
 				Name:  "pre",
 				Usage: "Optional pre-release channel, e.g. beta, staging, preprod",
@@ -42,6 +54,11 @@ const (
 )
 
 func releaseAction(_ context.Context, cmd *cli.Command) error {
+	mode, err := resolveReleaseMode(cmd)
+	if err != nil {
+		return err
+	}
+
 	cwd, err := os.Getwd()
 	if err != nil {
 		return fmt.Errorf("get working directory: %w", err)
@@ -52,8 +69,10 @@ func releaseAction(_ context.Context, cmd *cli.Command) error {
 		return err
 	}
 
-	if err := ensureCleanWorkingTree(repoRoot); err != nil {
-		return err
+	if mode.requiresGitWrites() {
+		if err := ensureCleanWorkingTree(repoRoot); err != nil {
+			return err
+		}
 	}
 
 	changesDir, err := changeentry.ResolveChangesDirectory(cwd)
@@ -64,6 +83,13 @@ func releaseAction(_ context.Context, cmd *cli.Command) error {
 	module, err := changeentry.ResolveModuleForChangesDir(repoRoot, changesDir)
 	if err != nil {
 		return err
+	}
+
+	if mode.willCreateTag && !module.GitWrite.AllowsReleaseTag() {
+		return changeentry.NewValidationError("config", "release tag creation is disabled by gitWrite policy")
+	}
+	if mode.pushTag && !module.GitWrite.AllowsReleasePush() {
+		return changeentry.NewValidationError("config", "release tag push is disabled by gitWrite policy")
 	}
 
 	cl, err := changelog.LoadChangeLog(repoRoot, module, changelog.FilterOptions{})
@@ -126,6 +152,20 @@ func releaseAction(_ context.Context, cmd *cli.Command) error {
 	versionText := nextVersion.String(withVPrefix)
 	tagName := module.TagPrefix + versionText
 
+	if mode.versionOnly {
+		fmt.Println(versionText)
+		return nil
+	}
+
+	entryCount := staging.Groups[0].TotalEntries()
+	if mode.dryRun {
+		fmt.Printf("Dry-run: would create local tag %s for module %q from %d staging %s.\n", tagName, module.Name, entryCount, pluralize(entryCount, "entry", "entries"))
+		if mode.pushTag {
+			fmt.Printf("Dry-run: would push tag with: git push origin %s\n", tagName)
+		}
+		return nil
+	}
+
 	if err = createLocalTag(repoRoot, tagName); err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "already exists") {
 			return changeentry.NewConflictError(fmt.Sprintf("tag already exists: %s", tagName))
@@ -133,12 +173,52 @@ func releaseAction(_ context.Context, cmd *cli.Command) error {
 		return err
 	}
 
-	entryCount := staging.Groups[0].TotalEntries()
 	fmt.Printf("Created local tag %s for module %q from %d staging %s.\n", tagName, module.Name, entryCount, pluralize(entryCount, "entry", "entries"))
+
+	if mode.pushTag {
+		if err := pushTag(repoRoot, tagName); err != nil {
+			return err
+		}
+		fmt.Printf("Pushed tag %s to origin.\n", tagName)
+		return nil
+	}
+
 	fmt.Println("Tag was created locally and was not pushed.")
 	fmt.Printf("To push it, run:\n\n  git push origin %s\n", tagName)
 
 	return nil
+}
+
+type releaseMode struct {
+	dryRun        bool
+	versionOnly   bool
+	pushTag       bool
+	willCreateTag bool
+}
+
+func resolveReleaseMode(cmd *cli.Command) (releaseMode, error) {
+	mode := releaseMode{
+		dryRun:      cmd.Bool("dry-run"),
+		versionOnly: cmd.Bool("version-only"),
+		pushTag:     cmd.Bool("push"),
+	}
+
+	if mode.versionOnly && mode.pushTag {
+		return releaseMode{}, changeentry.NewValidationError("flags", "--version-only cannot be combined with --push")
+	}
+	if mode.versionOnly && mode.dryRun {
+		return releaseMode{}, changeentry.NewValidationError("flags", "--version-only cannot be combined with --dry-run")
+	}
+	if mode.dryRun && mode.pushTag {
+		return releaseMode{}, changeentry.NewValidationError("flags", "--dry-run cannot be combined with --push")
+	}
+
+	mode.willCreateTag = !mode.dryRun && !mode.versionOnly
+	return mode, nil
+}
+
+func (m releaseMode) requiresGitWrites() bool {
+	return m.willCreateTag || m.pushTag
 }
 
 func detectBumpLevel(group changelog.VersionGroup) int {
@@ -178,12 +258,12 @@ func bumpVersion(version changelog.SemVersion, level int) changelog.SemVersion {
 func promptFirstVersion(input *os.File, output *os.File, interactive bool) (string, error) {
 	const defaultVersion = "0.1.0"
 	if !interactive {
-		fmt.Fprintf(output, "No stable SemVer tag found. Using default initial release version %s (non-interactive).\n", defaultVersion)
+		_, _ = fmt.Fprintf(output, "No stable SemVer tag found. Using default initial release version %s (non-interactive).\n", defaultVersion)
 		return defaultVersion, nil
 	}
 
 	reader := bufio.NewReader(input)
-	fmt.Fprintf(output, "No stable SemVer tag found. Enter initial release version [%s]: ", defaultVersion)
+	_, _ = fmt.Fprintf(output, "No stable SemVer tag found. Enter initial release version [%s]: ", defaultVersion)
 	line, err := reader.ReadString('\n')
 	if err != nil {
 		trimmed := strings.TrimSpace(line)
@@ -210,6 +290,20 @@ func createLocalTag(repoRoot string, version string) error {
 			msg = err.Error()
 		}
 		return fmt.Errorf("create git tag %s: %s", version, msg)
+	}
+
+	return nil
+}
+
+func pushTag(repoRoot string, version string) error {
+	cmd := exec.Command("git", "push", "origin", version)
+	cmd.Dir = repoRoot
+	if out, err := cmd.CombinedOutput(); err != nil {
+		msg := strings.TrimSpace(string(out))
+		if msg == "" {
+			msg = err.Error()
+		}
+		return fmt.Errorf("push git tag %s: %s", version, msg)
 	}
 
 	return nil

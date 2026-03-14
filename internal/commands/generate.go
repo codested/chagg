@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/codested/chagg/internal/changeentry"
 	"github.com/codested/chagg/internal/changelog"
@@ -14,11 +15,16 @@ func GenerateCommand() *cli.Command {
 	return &cli.Command{
 		Name:    "generate",
 		Aliases: []string{"gen", "g"},
-		Usage:   "Generate a Markdown changelog from all change entries",
+		Usage:   "Generate a changelog from all change entries",
 		Description: "Produces a full changelog grouped by version and change type. " +
 			"Use --latest or --since to restrict the version range, " +
 			"and --audience / --component / --type to filter entries.",
 		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:  "format",
+				Usage: "Output format: markdown, json, html",
+				Value: "markdown",
+			},
 			&cli.BoolFlag{
 				Name:  "latest",
 				Usage: "Include only the most recent tagged release",
@@ -78,5 +84,27 @@ func generateAction(_ context.Context, cmd *cli.Command) error {
 
 	cl = changelog.ApplyVersionFilter(cl, cmd.String("since"), cmd.Bool("latest"))
 
-	return changelog.RenderMarkdown(cl, os.Stdout)
+	format := normalizeGenerateFormat(cmd.String("format"))
+	switch format {
+	case "markdown":
+		return changelog.RenderMarkdown(cl, os.Stdout)
+	case "json":
+		return changelog.RenderJSON(cl, os.Stdout)
+	case "html":
+		return changelog.RenderHTML(cl, os.Stdout)
+	default:
+		return changeentry.NewValidationError("format", fmt.Sprintf("unsupported format %q (use markdown, json, or html)", cmd.String("format")))
+	}
+}
+
+func normalizeGenerateFormat(format string) string {
+	format = strings.ToLower(strings.TrimSpace(format))
+	switch format {
+	case "md":
+		return "markdown"
+	case "htm":
+		return "html"
+	default:
+		return format
+	}
 }

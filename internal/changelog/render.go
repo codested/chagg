@@ -3,12 +3,14 @@ package changelog
 import (
 	"bytes"
 	_ "embed"
+	"encoding/json"
 	"fmt"
+	htmltemplate "html/template"
 	"io"
 	"path/filepath"
 	"strings"
 	"text/tabwriter"
-	"text/template"
+	texttemplate "text/template"
 
 	"github.com/codested/chagg/internal/changeentry"
 )
@@ -17,6 +19,9 @@ const defaultLogPreviewMaxLen = 80
 
 //go:embed templates/changelog.md.tmpl
 var changelogTemplateSource string
+
+//go:embed templates/changelog.html.tmpl
+var changelogHTMLTemplateSource string
 
 type changelogTemplateData struct {
 	Groups []changelogTemplateGroup
@@ -33,7 +38,8 @@ type changelogTemplateTypeGroup struct {
 	EntriesBlock string
 }
 
-var changelogTemplate = template.Must(template.New("changelog.md.tmpl").Parse(changelogTemplateSource))
+var changelogTemplate = texttemplate.Must(texttemplate.New("changelog.md.tmpl").Parse(changelogTemplateSource))
+var changelogHTMLTemplate = htmltemplate.Must(htmltemplate.New("changelog.html.tmpl").Parse(changelogHTMLTemplateSource))
 
 // RenderLog writes a human-readable, columnar overview of the changelog
 // groups to w.  baseDir is used to compute display-friendly relative paths
@@ -114,6 +120,145 @@ func RenderMarkdown(cl *ChangeLog, w io.Writer) error {
 
 	_, err := io.WriteString(w, b.String())
 	return err
+}
+
+func RenderJSON(cl *ChangeLog, w io.Writer) error {
+	type jsonEntry struct {
+		Path      string   `json:"path"`
+		Type      string   `json:"type"`
+		Breaking  bool     `json:"breaking"`
+		Component []string `json:"component,omitempty"`
+		Audience  []string `json:"audience,omitempty"`
+		Priority  int      `json:"priority,omitempty"`
+		Issue     []string `json:"issue,omitempty"`
+		Release   string   `json:"release,omitempty"`
+		Preview   string   `json:"preview,omitempty"`
+		Body      string   `json:"body,omitempty"`
+	}
+
+	type jsonTypeGroup struct {
+		Type    string      `json:"type"`
+		Title   string      `json:"title"`
+		Entries []jsonEntry `json:"entries"`
+	}
+
+	type jsonGroup struct {
+		Version   string          `json:"version"`
+		Title     string          `json:"title"`
+		Date      string          `json:"date,omitempty"`
+		IsStaging bool            `json:"isStaging"`
+		Types     []jsonTypeGroup `json:"types"`
+	}
+
+	type jsonDocument struct {
+		Module string      `json:"module"`
+		Groups []jsonGroup `json:"groups"`
+	}
+
+	groups := make([]jsonGroup, 0, len(cl.Groups))
+	for _, group := range cl.Groups {
+		if group.TotalEntries() == 0 {
+			continue
+		}
+
+		typeGroups := make([]jsonTypeGroup, 0, len(group.TypeGroups))
+		for _, tg := range group.TypeGroups {
+			entries := make([]jsonEntry, 0, len(tg.Entries))
+			for _, entry := range tg.Entries {
+				entries = append(entries, jsonEntry{
+					Path:      entry.Path,
+					Type:      string(entry.Entry.Type),
+					Breaking:  entry.Entry.Breaking,
+					Component: entry.Entry.Component,
+					Audience:  entry.Entry.Audience,
+					Priority:  entry.Entry.Priority,
+					Issue:     entry.Entry.Issue,
+					Release:   entry.Entry.Release,
+					Preview:   entry.Preview(),
+					Body:      strings.TrimSpace(entry.Entry.Body),
+				})
+			}
+
+			typeGroups = append(typeGroups, jsonTypeGroup{
+				Type:    string(tg.ChangeType),
+				Title:   tg.Title,
+				Entries: entries,
+			})
+		}
+
+		groups = append(groups, jsonGroup{
+			Version:   group.Version,
+			Title:     group.VersionTitle(),
+			Date:      group.FormattedDate(),
+			IsStaging: group.IsStaging(),
+			Types:     typeGroups,
+		})
+	}
+
+	doc := jsonDocument{Module: cl.Module.Name, Groups: groups}
+	encoder := json.NewEncoder(w)
+	encoder.SetIndent("", "  ")
+	return encoder.Encode(doc)
+}
+
+func RenderHTML(cl *ChangeLog, w io.Writer) error {
+	type htmlTypeGroup struct {
+		Title   string
+		Entries []string
+	}
+
+	type htmlGroup struct {
+		Heading    string
+		Date       string
+		DocsBlock  []string
+		TypeGroups []htmlTypeGroup
+	}
+
+	type htmlTemplateData struct {
+		Title  string
+		Module string
+		Groups []htmlGroup
+	}
+
+	groups := make([]htmlGroup, 0, len(cl.Groups))
+	for _, group := range cl.Groups {
+		if group.TotalEntries() == 0 {
+			continue
+		}
+
+		hg := htmlGroup{
+			Heading: group.VersionTitle(),
+			Date:    group.FormattedDate(),
+		}
+
+		for _, tg := range group.TypeGroups {
+			if tg.ChangeType == changeentry.ChangeTypeDocs {
+				docs := make([]string, 0, len(tg.Entries))
+				for _, entry := range tg.Entries {
+					docs = append(docs, docBodyText(entry))
+				}
+				hg.DocsBlock = docs
+				continue
+			}
+
+			entries := make([]string, 0, len(tg.Entries))
+			for _, entry := range tg.Entries {
+				entries = append(entries, renderHTMLEntry(entry))
+			}
+
+			hg.TypeGroups = append(hg.TypeGroups, htmlTypeGroup{Title: tg.Title, Entries: entries})
+		}
+
+		groups = append(groups, hg)
+	}
+
+	data := htmlTemplateData{
+		Title:  "Changelog",
+		Module: cl.Module.Name,
+		Groups: groups,
+	}
+
+	return changelogHTMLTemplate.Execute(w, data)
 }
 
 func pluralise(n int, singular, plural string) string {
@@ -237,4 +382,24 @@ func renderBulletEntry(entry EntryWithMeta) string {
 	}
 
 	return builder.String()
+}
+
+func renderHTMLEntry(entry EntryWithMeta) string {
+	lines := bodyBulletLines(entry.Entry.Body)
+	if len(lines) == 0 {
+		lines = []string{filepath.Base(entry.Path)}
+	}
+
+	text := lines[0]
+	if entry.Entry.Breaking {
+		text = "Breaking - " + text
+	}
+	if len(entry.Entry.Component) > 0 {
+		text += " (" + strings.Join(entry.Entry.Component, ", ") + ")"
+	}
+	if len(lines) > 1 {
+		text += " " + strings.Join(lines[1:], " ")
+	}
+
+	return text
 }

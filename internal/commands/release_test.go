@@ -88,3 +88,75 @@ func TestDetectBumpLevelPatchForFix(t *testing.T) {
 		t.Fatalf("expected patch bump, got %d", level)
 	}
 }
+
+func TestResolveReleaseModeDefaultsToWriteMode(t *testing.T) {
+	mode, err := resolveReleaseMode(ReleaseCommand())
+	if err != nil {
+		t.Fatalf("resolveReleaseMode returned error: %v", err)
+	}
+
+	if !mode.willCreateTag || mode.dryRun || mode.versionOnly || mode.pushTag {
+		t.Fatalf("unexpected default mode: %+v", mode)
+	}
+}
+
+func TestResolveReleaseModeRejectsInvalidCombinations(t *testing.T) {
+	cmd := ReleaseCommand()
+	if err := cmd.Set("dry-run", "true"); err != nil {
+		t.Fatalf("set dry-run: %v", err)
+	}
+	if err := cmd.Set("push", "true"); err != nil {
+		t.Fatalf("set push: %v", err)
+	}
+
+	_, err := resolveReleaseMode(cmd)
+	if err == nil {
+		t.Fatalf("expected error")
+	}
+
+	validationErr, ok := err.(*changeentry.ValidationError)
+	if !ok {
+		t.Fatalf("expected ValidationError, got %T", err)
+	}
+	if validationErr.Field != "flags" {
+		t.Fatalf("expected flags validation error, got %q", validationErr.Field)
+	}
+}
+
+func TestResolveReleaseModeVersionOnly(t *testing.T) {
+	cmd := ReleaseCommand()
+	if err := cmd.Set("version-only", "true"); err != nil {
+		t.Fatalf("set version-only: %v", err)
+	}
+
+	mode, err := resolveReleaseMode(cmd)
+	if err != nil {
+		t.Fatalf("resolveReleaseMode returned error: %v", err)
+	}
+
+	if !mode.versionOnly || mode.willCreateTag {
+		t.Fatalf("unexpected mode: %+v", mode)
+	}
+	if mode.requiresGitWrites() {
+		t.Fatalf("version-only should not require git writes")
+	}
+}
+
+func TestResolveReleaseModePush(t *testing.T) {
+	cmd := ReleaseCommand()
+	if err := cmd.Set("push", "true"); err != nil {
+		t.Fatalf("set push: %v", err)
+	}
+
+	mode, err := resolveReleaseMode(cmd)
+	if err != nil {
+		t.Fatalf("resolveReleaseMode returned error: %v", err)
+	}
+
+	if !mode.pushTag || !mode.willCreateTag {
+		t.Fatalf("unexpected mode: %+v", mode)
+	}
+	if !mode.requiresGitWrites() {
+		t.Fatalf("push mode should require git writes")
+	}
+}

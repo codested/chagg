@@ -4,6 +4,9 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
 
 	"github.com/codested/chagg/internal/changeentry"
 	"github.com/urfave/cli/v3"
@@ -24,6 +27,8 @@ func AddCommand() *cli.Command {
 			&cli.StringFlag{Name: "issue", Usage: "Issue reference(s), comma separated"},
 			&cli.StringFlag{Name: "release", Usage: "Pin entry to release version"},
 			&cli.StringFlag{Name: "body", Usage: "Markdown body content"},
+			&cli.BoolFlag{Name: "git-add", Usage: "Stage the created change file with git add"},
+			&cli.BoolFlag{Name: "no-git-add", Usage: "Do not stage the created change file"},
 			&cli.BoolFlag{Name: "no-prompt", Usage: "Disable interactive prompts and use defaults for omitted fields"},
 		},
 		Action: addAction,
@@ -31,6 +36,34 @@ func AddCommand() *cli.Command {
 }
 
 func addAction(_ context.Context, cmd *cli.Command) error {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("get working directory: %w", err)
+	}
+
+	repoRoot, hasGitRoot, err := changeentry.FindGitRoot(cwd)
+	if err != nil {
+		return err
+	}
+
+	changesDir, err := changeentry.ResolveChangesDirectory(cwd)
+	if err != nil {
+		return err
+	}
+
+	module, err := changeentry.ResolveModuleForChangesDir(repoRoot, changesDir)
+	if err != nil {
+		return err
+	}
+
+	shouldGitAdd, err := resolveGitAddBehavior(cmd, module)
+	if err != nil {
+		return err
+	}
+	if shouldGitAdd && !module.GitWrite.AllowsAdd() {
+		return changeentry.NewValidationError("config", "git add is disabled by gitWrite policy")
+	}
+
 	params := changeentry.Params{
 		Type:         cmd.String("type"),
 		TypeSet:      cmd.IsSet("type"),
@@ -56,7 +89,53 @@ func addAction(_ context.Context, cmd *cli.Command) error {
 		return err
 	}
 
+	if shouldGitAdd && hasGitRoot {
+		if err := gitAddPath(repoRoot, path); err != nil {
+			return err
+		}
+	}
+
 	fmt.Printf("Created %s\n", path)
+	if shouldGitAdd && hasGitRoot {
+		fmt.Printf("Staged %s\n", path)
+	}
+	return nil
+}
+
+func resolveGitAddBehavior(cmd *cli.Command, module changeentry.ModuleConfig) (bool, error) {
+	if cmd.IsSet("git-add") && cmd.IsSet("no-git-add") {
+		if cmd.Bool("git-add") == cmd.Bool("no-git-add") {
+			return false, changeentry.NewValidationError("flags", "--git-add and --no-git-add cannot be used together")
+		}
+	}
+
+	if cmd.IsSet("no-git-add") && cmd.Bool("no-git-add") {
+		return false, nil
+	}
+
+	if cmd.IsSet("git-add") {
+		return cmd.Bool("git-add"), nil
+	}
+
+	return module.Defaults.AutoAddToGit, nil
+}
+
+func gitAddPath(repoRoot string, path string) error {
+	relPath, err := filepath.Rel(repoRoot, path)
+	if err != nil {
+		relPath = path
+	}
+
+	cmd := exec.Command("git", "add", "--", relPath)
+	cmd.Dir = repoRoot
+	if out, cmdErr := cmd.CombinedOutput(); cmdErr != nil {
+		message := strings.TrimSpace(string(out))
+		if message == "" {
+			message = cmdErr.Error()
+		}
+		return fmt.Errorf("git add %s: %s", relPath, message)
+	}
+
 	return nil
 }
 

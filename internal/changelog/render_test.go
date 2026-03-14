@@ -2,6 +2,7 @@ package changelog
 
 import (
 	"bytes"
+	"encoding/json"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -175,5 +176,68 @@ func TestTruncateLogPreviewAddsEllipsisWhenPreviewTooLong(t *testing.T) {
 
 	if !strings.HasSuffix(result, "...") {
 		t.Fatalf("expected truncated preview to end with ellipsis, got %q", result)
+	}
+}
+
+func TestRenderJSONProducesStructuredOutput(t *testing.T) {
+	changeLog := &ChangeLog{
+		Module: changeentry.ModuleConfig{Name: "default"},
+		Groups: []VersionGroup{{
+			Version: "staging",
+			TypeGroups: []TypeGroup{{
+				ChangeType: changeentry.ChangeTypeFix,
+				Title:      "Bug Fixes",
+				Entries: []EntryWithMeta{{
+					Entry: changeentry.Entry{Type: changeentry.ChangeTypeFix, Body: "Fix bug."},
+					Path:  ".changes/fix.md",
+				}},
+			}},
+		}},
+	}
+
+	buffer := bytes.NewBuffer(nil)
+	if err := RenderJSON(changeLog, buffer); err != nil {
+		t.Fatalf("RenderJSON returned error: %v", err)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(buffer.Bytes(), &payload); err != nil {
+		t.Fatalf("failed to unmarshal output: %v", err)
+	}
+
+	if payload["module"] != "default" {
+		t.Fatalf("expected module default, got %#v", payload["module"])
+	}
+}
+
+func TestRenderHTMLProducesExpectedSections(t *testing.T) {
+	changeLog := &ChangeLog{
+		Groups: []VersionGroup{{
+			Version: "v1.0.0",
+			TypeGroups: []TypeGroup{{
+				ChangeType: changeentry.ChangeTypeFeature,
+				Title:      "Features",
+				Entries: []EntryWithMeta{{
+					Entry: changeentry.Entry{Type: changeentry.ChangeTypeFeature, Body: "Add thing."},
+					Path:  ".changes/add.md",
+				}},
+			}},
+		}},
+	}
+
+	buffer := bytes.NewBuffer(nil)
+	if err := RenderHTML(changeLog, buffer); err != nil {
+		t.Fatalf("RenderHTML returned error: %v", err)
+	}
+
+	output := buffer.String()
+	if !strings.Contains(output, "<h1>Changelog</h1>") {
+		t.Fatalf("expected html title, got:\n%s", output)
+	}
+	if !strings.Contains(output, "<h2>v1.0.0</h2>") {
+		t.Fatalf("expected version section, got:\n%s", output)
+	}
+	if !strings.Contains(output, "<h3>Features</h3>") {
+		t.Fatalf("expected type section, got:\n%s", output)
 	}
 }

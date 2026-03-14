@@ -56,6 +56,33 @@ Rules:
 - `tagPrefix` is prepended when tags are read/created (for example `msal-browser/v1.4.0`).
 - If `.chagg.yaml` exists, discovered `.changes` directories must be declared in the file.
 - If config is missing, `chagg` falls back to single-module defaults.
+- Supported config file names at repo root: `.chagg.yaml`, `.chagg.yml`, `chagg.yml`.
+
+Optional defaults/policies:
+
+```yaml
+defaults:
+  autoAddToGit: true
+gitWrite:
+  enabled: true
+  add: true
+  releaseTag: true
+  releasePush: true
+
+modules:
+  - name: msal-browser
+    changesDir: lib/msal-browser/.changes
+    tagPrefix: msal-browser/
+    defaults:
+      autoAddToGit: true
+    gitWrite:
+      releasePush: false
+```
+
+- `defaults.autoAddToGit`: default behavior for `chagg add` staging (`git add`) the new file.
+- `gitWrite.enabled`: global kill-switch for write operations.
+- `gitWrite.add`, `gitWrite.releaseTag`, `gitWrite.releasePush`: granular write permissions.
+- Module-level `defaults` and `gitWrite` override global values.
 
 ## Change entry format
 
@@ -102,6 +129,8 @@ Creates a new entry file below `.changes`.
 - Missing directories are created automatically.
 - Supports flags for all entry properties (`--type`, `--breaking`, `--component`, `--audience`, `--priority`, `--issue`,
   `--release`, `--body`).
+- By default, new files are staged automatically (`git add`) after creation.
+- Use `--no-git-add` to skip staging, or `--git-add` to force staging explicitly.
 - If a value is not provided via flags, interactive mode prompts for it (required `type` is prompted if missing).
 - If stdin is piped, prompts are skipped (no blocking).
 - `--no-prompt` forces non-interactive mode (recommended for CI and AI tooling).
@@ -148,6 +177,7 @@ Generates a Markdown changelog grouped by version and change type.
 - Default: all available versions + unreleased.
 - `--latest`: only the newest tagged release.
 - `--since <version>`: include that version and newer versions.
+- `--format <markdown|json|html>`: output format (default `markdown`).
 - Filters: `--audience`, `--component`, `--type`.
 - In multi-module mode, output is generated for the module associated with the current `.changes` directory.
 - If invalid change files are present, `generate` fails and asks you to run `chagg check`.
@@ -163,8 +193,12 @@ Creates the next release tag from current staging changes.
     - patch: otherwise
 - If no SemVer tag exists yet, prompts for the initial version (default `0.1.0`).
 - Tag is created **locally only**. `chagg` prints a copy-paste command to push it.
+- `--dry-run`: computes and prints what would happen, but does not create/push tags.
+- `--version-only`: prints only the computed version (for scripts/export).
+- `--push`: pushes the newly created tag to `origin` automatically.
 - In multi-module mode, created tags are prefixed with module `tagPrefix`.
 - Release requires a clean Git working tree (no staged/unstaged/untracked changes).
+- Git write operations are gated by `gitWrite` policy from config.
 
 Suffix handling:
 
@@ -183,6 +217,15 @@ chagg release --pre beta
 
 # create a pre-release with build metadata
 chagg release --pre preprod --build build.20260314
+
+# compute release version only
+chagg release --version-only
+
+# dry-run release
+chagg release --dry-run
+
+# create and push tag automatically
+chagg release --push
 ```
 
 ## Typical release flow
