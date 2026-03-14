@@ -14,14 +14,14 @@ import (
 func main() {
 	cmd := &cli.Command{
 		Name:  "chagg",
-		Usage: "A modern release management tool",
+		Usage: "A modern changelog & release management tool",
 		Commands: []*cli.Command{
-			commands.LogCommand(),
 			commands.AddCommand(),
 			commands.CheckCommand(),
-			commands.TidyCommand(),
+			commands.LogCommand(),
 			commands.GenerateCommand(),
 			commands.ReleaseCommand(),
+			commands.TidyCommand(),
 		},
 	}
 
