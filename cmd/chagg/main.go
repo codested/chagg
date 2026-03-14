@@ -26,8 +26,7 @@ func main() {
 
 	if err := cmd.Run(context.Background(), os.Args); err != nil {
 		exitCode := changeentry.ExitCodeGeneral
-		var codedErr changeentry.CodedError
-		if errors.As(err, &codedErr) {
+		if codedErr, ok := errors.AsType[changeentry.CodedError](err); ok {
 			exitCode = codedErr.ExitCode()
 		}
 

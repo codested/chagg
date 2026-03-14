@@ -209,7 +209,7 @@ func pluralizeCount(n int, singular, plural string) string {
 //
 // Priority:
 //  1. The entry's release: field (pinned) — matched against known tags,
-//     normalising the "v" prefix on both sides.
+//     normalizing the "v" prefix on both sides.
 //  2. Git history: file is assigned to the earliest tag whose commit date
 //     is >= the file's add date.
 //  3. Fallback: "staging".
@@ -258,8 +258,7 @@ func buildChangeLog(entries []EntryWithMeta, tags []Tag) *ChangeLog {
 		tag := tags[i]
 		tagSet[tag.Name] = true
 		if tagEntries, ok := groupMap[tag.Name]; ok {
-			tagCopy := tag
-			groups = append(groups, buildVersionGroup(tag.Name, &tagCopy, tagEntries))
+			groups = append(groups, buildVersionGroup(tag.Name, new(tag), tagEntries))
 		}
 	}
 

@@ -254,8 +254,7 @@ func TestCreateChangeReturnsValidationErrorWithoutPromptInNonInteractiveMode(t *
 		t.Fatalf("expected error")
 	}
 
-	var validationErr *ValidationError
-	if !errors.As(err, &validationErr) {
+	if _, ok := errors.AsType[*ValidationError](err); !ok {
 		t.Fatalf("expected ValidationError, got %T", err)
 	}
 

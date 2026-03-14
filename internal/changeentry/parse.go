@@ -111,10 +111,10 @@ func ParseEntry(content string) (Entry, []error) {
 	return Entry{
 		Type:      changeType,
 		Breaking:  fm.Breaking,
-		Component: []string(fm.Component),
+		Component: fm.Component,
 		Audience:  audience,
 		Priority:  fm.Priority,
-		Issue:     []string(fm.Issue),
+		Issue:     fm.Issue,
 		Release:   strings.TrimSpace(fm.Release),
 		Body:      strings.TrimSpace(parts.body),
 	}, nil

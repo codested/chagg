@@ -138,7 +138,7 @@ Shows a human-friendly release preview.
 Version assignment rules:
 
 1. If `release:` is set, that pinned version is used.
-2. Otherwise the file is assigned by the commit where it was originally added.
+2. Otherwise, the file is assigned by the commit where it was originally added.
 3. Edits/moves do not change version assignment.
 
 ### `chagg generate`
