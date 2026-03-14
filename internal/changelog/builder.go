@@ -119,8 +119,6 @@ func loadEntries(repoRoot string, module changeentry.ModuleConfig, tags []Tag) (
 		return nil, nil, err
 	}
 
-	addedAtByPath := FileAddedAtMany(repoRoot, paths)
-
 	entries := make([]EntryWithMeta, 0, len(paths))
 	invalidEntries := make([]InvalidEntry, 0)
 	for _, path := range paths {
@@ -135,13 +133,9 @@ func loadEntries(repoRoot string, module changeentry.ModuleConfig, tags []Tag) (
 			continue // keep collecting to report all invalid files at once
 		}
 
-		addedAt, hasGit := addedAtByPath[path], false
-		if !addedAt.IsZero() {
-			hasGit = true
-		} else {
-			// Fallback keeps rename-follow behavior for paths not resolved in batch mode.
-			addedAt, hasGit = FileAddedAt(repoRoot, path)
-		}
+		// Per-file lookup keeps --follow semantics so moved files are attributed
+		// to the commit where they originally entered history.
+		addedAt, hasGit := FileAddedAt(repoRoot, path)
 
 		version := resolveVersion(entry, addedAt, hasGit, tags)
 
