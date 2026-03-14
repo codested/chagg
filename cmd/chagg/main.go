@@ -21,7 +21,6 @@ func main() {
 			commands.LogCommand(),
 			commands.GenerateCommand(),
 			commands.ReleaseCommand(),
-			commands.TidyCommand(),
 		},
 	}
 

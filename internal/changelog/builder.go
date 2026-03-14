@@ -38,21 +38,10 @@ var typeTitles = map[changeentry.ChangeType]string{
 func LoadChangeLog(repoRoot string, module changeentry.ModuleConfig, filter FilterOptions) (*ChangeLog, error) {
 	tags, _ := ListSemVerTags(repoRoot, module.TagPrefix) // non-fatal; proceed without history
 
-	if err := validateArchiveDirectoryIntegrity(repoRoot, module); err != nil {
-		return nil, err
-	}
-
 	entries, invalidEntries, err := loadEntries(repoRoot, module, tags)
 	if err != nil {
 		return nil, err
 	}
-
-	archivedEntries, archivedInvalid, err := loadArchivedEntries(module)
-	if err != nil {
-		return nil, err
-	}
-	entries = append(entries, archivedEntries...)
-	invalidEntries = append(invalidEntries, archivedInvalid...)
 
 	if len(invalidEntries) > 0 {
 		return nil, invalidEntriesError(invalidEntries)
@@ -64,40 +53,6 @@ func LoadChangeLog(repoRoot string, module changeentry.ModuleConfig, filter Filt
 	cl.Module = module
 	cl.InvalidEntries = invalidEntries
 	return cl, nil
-}
-
-func validateArchiveDirectoryIntegrity(repoRoot string, module changeentry.ModuleConfig) error {
-	archiveRoot := filepath.Join(module.ChangesDir, "archive")
-	if _, statErr := os.Stat(archiveRoot); os.IsNotExist(statErr) {
-		return nil
-	}
-
-	moves, err := FindArchiveDirectoryMoves(repoRoot, archiveRoot)
-	if err != nil {
-		return nil // keep behavior non-fatal when git history is unavailable
-	}
-
-	if len(moves) == 0 {
-		return nil
-	}
-
-	maxExamples := 3
-	if len(moves) < maxExamples {
-		maxExamples = len(moves)
-	}
-	examples := make([]string, 0, maxExamples)
-	for i := 0; i < maxExamples; i++ {
-		examples = append(examples, fmt.Sprintf("%s -> %s", moves[i].From, moves[i].To))
-	}
-
-	message := fmt.Sprintf(
-		"archived files must stay in their original archive directory; found %d cross-directory move%s (for example: %s)",
-		len(moves),
-		pluralizeCount(len(moves), "", "s"),
-		strings.Join(examples, "; "),
-	)
-
-	return changeentry.NewValidationError("archive", message)
 }
 
 // StagingOnly returns a changelog that contains only the staging group.
@@ -211,9 +166,6 @@ func collectChangeEntryPaths(changesDir string) ([]string, error) {
 			return err
 		}
 		if d.IsDir() {
-			if d.Name() == "archive" {
-				return filepath.SkipDir
-			}
 			return nil
 		}
 		if !strings.HasSuffix(strings.ToLower(d.Name()), ".md") {
@@ -473,71 +425,4 @@ func NextPreReleaseLabelVersion(base SemVersion, label string, tags []Tag) SemVe
 
 	next.PreRelease = fmt.Sprintf("%s.%d", label, maxN+1)
 	return next
-}
-
-// loadArchivedEntries reads change entries from .changes/archive/<version>/
-// and assigns each entry directly to the version taken from the directory name,
-// bypassing git history entirely. This avoids misassignment for entries that
-// were moved by tidy and whose git path history no longer reflects the original
-// add commit.
-func loadArchivedEntries(module changeentry.ModuleConfig) ([]EntryWithMeta, []InvalidEntry, error) {
-	archiveRoot := filepath.Join(module.ChangesDir, "archive")
-	if _, statErr := os.Stat(archiveRoot); os.IsNotExist(statErr) {
-		return nil, nil, nil
-	}
-
-	entries := make([]EntryWithMeta, 0)
-	invalidEntries := make([]InvalidEntry, 0)
-
-	versionDirs, err := os.ReadDir(archiveRoot)
-	if err != nil {
-		return nil, nil, fmt.Errorf("read archive directory %s: %w", archiveRoot, err)
-	}
-
-	for _, versionDir := range versionDirs {
-		if !versionDir.IsDir() {
-			continue
-		}
-
-		version := versionDir.Name()
-		versionPath := filepath.Join(archiveRoot, version)
-
-		walkErr := filepath.WalkDir(versionPath, func(path string, d os.DirEntry, err error) error {
-			if err != nil {
-				return err
-			}
-			if d.IsDir() {
-				return nil
-			}
-			if !strings.HasSuffix(strings.ToLower(d.Name()), ".md") {
-				return nil
-			}
-
-			contentBytes, readErr := os.ReadFile(path)
-			if readErr != nil {
-				return fmt.Errorf("read %s: %w", path, readErr)
-			}
-
-			entry, errs := changeentry.ParseEntry(string(contentBytes))
-			if len(errs) > 0 {
-				invalidEntries = append(invalidEntries, InvalidEntry{Path: path, Errors: errs})
-				return nil
-			}
-
-			entries = append(entries, EntryWithMeta{
-				Entry:   entry,
-				Module:  module,
-				Path:    path,
-				Version: version,
-			})
-
-			return nil
-		})
-
-		if walkErr != nil {
-			return nil, nil, walkErr
-		}
-	}
-
-	return entries, invalidEntries, nil
 }

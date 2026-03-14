@@ -13,9 +13,6 @@ chagg add auth/new-login
 # validate all change entries
 chagg check
 
-# plan cleanup of released entries (dry-run)
-chagg tidy
-
 # preview unreleased (staging) changes
 chagg log
 
@@ -100,7 +97,6 @@ Creates a new entry file below `.changes`.
 
 - `chagg add auth/token-expiry` -> `.changes/auth/token-expiry.md`
 - Missing directories are created automatically.
-- `.changes/archive/**` is reserved; `chagg add` rejects paths under `archive/`.
 - Supports flags for all entry properties (`--type`, `--breaking`, `--component`, `--audience`, `--priority`, `--issue`, `--release`, `--body`).
 - If a value is not provided via flags, interactive mode prompts for it (required `type` is prompted if missing).
 - If stdin is piped, prompts are skipped (no blocking).
@@ -152,31 +148,6 @@ Generates a Markdown changelog grouped by version and change type.
 - In multi-module mode, output is generated for the module associated with the current `.changes` directory.
 - If invalid change files are present, `generate` fails and asks you to run `chagg check`.
 
-### `chagg tidy`
-
-Reorganizes released entries into archive folders without creating commits.
-
-- Default is dry-run: shows planned moves only.
-- `--apply`: executes the file moves.
-- `--all`: processes all discovered `.changes` directories in the repo.
-- Released entries are moved to `.changes/archive/<version>/<filename>.md`.
-- Staging entries are left untouched.
-- After `--apply`, empty source directories are pruned automatically.
-- Archive entries may be edited in place, but moving them between archive directories is rejected because archive directory history is used for version attribution.
-
-Examples:
-
-```bash
-# preview planned tidy operations
-chagg tidy
-
-# apply tidy operations in current changes directory
-chagg tidy --apply
-
-# apply across all modules/.changes dirs
-chagg tidy --all --apply
-```
-
 ### `chagg release`
 
 Creates the next release tag from current staging changes.
@@ -219,8 +190,6 @@ chagg add auth/token-fix --type fix --component auth
 # 2) validate
 chagg check
 
-# optional: archive released entries (dry-run first)
-chagg tidy
 
 # 3) preview
 chagg log
