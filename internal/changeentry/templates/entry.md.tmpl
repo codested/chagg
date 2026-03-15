@@ -1,4 +1,4 @@
-{{- if .ShowHeader }}
+{{- if .ShowHeader -}}
 ---
 {{- if .ShowBump }}
 bump: {{ .Bump }}
@@ -19,6 +19,6 @@ release: {{ .Release }}
 
 {{ .Body }}
 {{- end }}
-{{- else if .Body }}
+{{- else if .Body -}}
 {{ .Body }}
-{{- end }}
+{{- end -}}

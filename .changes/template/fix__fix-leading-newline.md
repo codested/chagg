@@ -1,0 +1,1 @@
+Remove spurious leading newline before front-matter delimiter in generated entry files. The newline caused splitFrontMatter to miss the --- header, so bump overrides and other front-matter fields were silently ignored and the raw YAML block appeared verbatim in generate output.

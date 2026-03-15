@@ -1,0 +1,1 @@
+Entry files with no front-matter fields are now written without any blank lines before the body. When front-matter is present a blank line is kept between the closing --- and the body.
