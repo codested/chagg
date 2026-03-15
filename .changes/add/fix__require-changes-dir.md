@@ -1,0 +1,1 @@
+The 'add' command now fails with a clear error message when no .changes directory exists, instead of silently creating one. Users are directed to run 'chagg init' first.

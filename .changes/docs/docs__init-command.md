@@ -1,0 +1,1 @@
+Document the 'chagg init' command in README: Quick start, Commands section, and Typical release flow.

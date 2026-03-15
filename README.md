@@ -8,6 +8,9 @@ validates them, shows release previews, generates Markdown changelogs, and creat
 ## Quick start
 
 ```bash
+# initialize the repository (creates .changes/ and optional .chagg.yaml)
+chagg init
+
 # create a change entry interactively
 chagg add auth/new-login
 
@@ -31,6 +34,8 @@ For commands that operate on a single working changes directory (for example `ad
 1. Start at the current working directory.
 2. Walk upward until an existing `.changes` directory is found.
 3. If none exists, keep walking to `.git` (or filesystem root) and use `.changes` there.
+
+`add` requires the `.changes` directory to already exist. Run `chagg init` if it has not been created yet.
 
 For `check`, `chagg` finds the Git root and validates **all** `.changes` directories below it (useful for multi-module
 repositories).
@@ -229,6 +234,27 @@ Notes:
 - The body is free Markdown. `log` uses the first non-empty line as preview text.
 
 ## Commands
+
+### `chagg init`
+
+Bootstraps a repository for use with `chagg`.
+
+- Detects the Git root and fails if the current directory is not inside a Git repository.
+- If run from a **sub-directory** of the repo, prompts whether to create a module for that directory or initialize at the repo root instead.
+- If run from the **repo root**, asks whether this is a multi-module project (default: no).
+  - **Single module**: creates `.changes/` at the repo root. No config file is needed.
+  - **Multi-module**: prompts for one or more modules (name, changes directory, tag prefix), then creates each `.changes/` directory and writes a `.chagg.yaml` with the `modules:` list.
+- Before entering multi-module setup, warns if existing bare SemVer tags (without a module prefix) are found, as they may conflict with future module-scoped releases.
+- Prints a summary of optional settings to configure afterward.
+- `--no-prompt`: non-interactive mode; uses all defaults (always single module, infers module name from directory).
+
+```bash
+# interactive setup at repo root
+chagg init
+
+# non-interactive (CI / scripted setup)
+chagg init --no-prompt
+```
 
 ### `chagg add <path>`
 
@@ -567,6 +593,9 @@ chagg config types
 ## Typical release flow
 
 ```bash
+# 0) one-time setup (creates .changes/)
+chagg init
+
 # 1) add entries while developing
 chagg add api/new-endpoint
 chagg add auth/token-fix --type fix --component auth

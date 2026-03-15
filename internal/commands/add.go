@@ -52,6 +52,11 @@ func addAction(_ context.Context, cmd *cli.Command) error {
 		return err
 	}
 
+	if _, statErr := os.Stat(changesDir); os.IsNotExist(statErr) {
+		return changeentry.NewValidationError("init",
+			"no .changes directory found; run 'chagg init' to set up this repository")
+	}
+
 	module, err := changeentry.ResolveModuleForChangesDir(repoRoot, changesDir)
 	if err != nil {
 		return err
