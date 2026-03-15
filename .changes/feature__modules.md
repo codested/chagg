@@ -1,0 +1,1 @@
+Added 'modules' command to list all modules
