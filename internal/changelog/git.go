@@ -61,12 +61,12 @@ func ListSemVerTags(repoRoot string, tagPrefix string) ([]Tag, error) {
 
 		dateStr, dateErr := runGit(repoRoot, "log", "--format=%aI", "-1", name)
 		if dateErr != nil {
-			continue
+			return nil, fmt.Errorf("get commit date for tag %q: %w", name, dateErr)
 		}
 
 		t, parseErr := time.Parse(time.RFC3339, strings.TrimSpace(dateStr))
 		if parseErr != nil {
-			continue
+			return nil, fmt.Errorf("parse commit date for tag %q: %w", name, parseErr)
 		}
 
 		tags = append(tags, Tag{Name: name, CommitDate: t, Version: version, HasVPrefix: hasVPrefix})

@@ -32,14 +32,14 @@ var entryTemplate = template.Must(template.New("entry.md.tmpl").Funcs(template.F
 func RenderEntry(entry Entry) (string, error) {
 	showBump := entry.Bump != ""
 	data := entryTemplateData{
-		ShowHeader:   showBump || len(entry.Component) > 0 || !isDefaultAudience(entry.Audience) || entry.Priority != 0 || len(entry.Issue) > 0 || strings.TrimSpace(entry.Release) != "",
+		ShowHeader:   showBump || len(entry.Component) > 0 || !isDefaultAudience(entry.Audience) || entry.Rank != 0 || len(entry.Issue) > 0 || strings.TrimSpace(entry.Release) != "",
 		Bump:         string(entry.Bump),
 		ShowBump:     showBump,
 		Component:    entry.Component,
 		Audience:     entry.Audience,
 		ShowAudience: !isDefaultAudience(entry.Audience),
-		Rank:         entry.Priority,
-		ShowRank:     entry.Priority != 0,
+		Rank:         entry.Rank,
+		ShowRank:     entry.Rank != 0,
 		Issue:        entry.Issue,
 		Release:      entry.Release,
 		Body:         entry.Body,

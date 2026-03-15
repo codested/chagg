@@ -33,10 +33,14 @@ var typeTitles = map[changeentry.ChangeType]string{
 // version using git tags discovered at repoRoot, applies filter, and returns
 // the fully grouped changelog.
 //
-// Git errors are treated as "no history available": all entries are then
-// assigned to the staging bucket. File-system errors are returned as-is.
+// When git is unavailable, all entries are assigned to the staging bucket.
+// When git is available but tag metadata cannot be read, an error is returned.
+// File-system errors are returned as-is.
 func LoadChangeLog(repoRoot string, module changeentry.ModuleConfig, filter FilterOptions) (*ChangeLog, error) {
-	tags, _ := ListSemVerTags(repoRoot, module.TagPrefix) // non-fatal; proceed without history
+	tags, err := ListSemVerTags(repoRoot, module.TagPrefix)
+	if err != nil {
+		return nil, fmt.Errorf("load version tags: %w", err)
+	}
 
 	entries, invalidEntries, err := loadEntries(repoRoot, module, tags)
 	if err != nil {
@@ -300,8 +304,8 @@ func buildChangeLog(entries []EntryWithMeta, tags []Tag) *ChangeLog {
 func buildVersionGroup(version string, tag *Tag, entries []EntryWithMeta) VersionGroup {
 	// Sort: rank desc (higher first), then addedAt desc, then path asc (deterministic).
 	sort.SliceStable(entries, func(i, j int) bool {
-		if entries[i].Entry.Priority != entries[j].Entry.Priority {
-			return entries[i].Entry.Priority > entries[j].Entry.Priority
+		if entries[i].Entry.Rank != entries[j].Entry.Rank {
+			return entries[i].Entry.Rank > entries[j].Entry.Rank
 		}
 		if !entries[i].AddedAt.Equal(entries[j].AddedAt) {
 			return entries[i].AddedAt.After(entries[j].AddedAt)

@@ -117,7 +117,7 @@ func TestRenderEntryOmitsDefaultFields(t *testing.T) {
 	entry := Entry{
 		Type:     ChangeTypeFeature,
 		Audience: nil,
-		Priority: 0,
+		Rank:     0,
 		Body:     "Test.",
 	}
 
@@ -134,8 +134,8 @@ func TestRenderEntryOmitsDefaultFields(t *testing.T) {
 		t.Fatalf("expected default audience to be omitted, got:\n%s", rendered)
 	}
 
-	if strings.Contains(rendered, "priority:") {
-		t.Fatalf("expected default priority to be omitted, got:\n%s", rendered)
+	if strings.Contains(rendered, "rank:") {
+		t.Fatalf("expected default rank to be omitted, got:\n%s", rendered)
 	}
 }
 
@@ -144,7 +144,7 @@ func TestRenderEntryIncludesNonDefaultFields(t *testing.T) {
 		Type:     ChangeTypeFix,
 		Bump:     BumpLevelMajor,
 		Audience: []string{"internal"},
-		Priority: 10,
+		Rank:     10,
 		Body:     "Fix.",
 	}
 
@@ -207,9 +207,9 @@ func TestRenderEntryPlacesClosingDelimiterOnSeparateLine(t *testing.T) {
 func TestCreateChangeCreatesTargetFileUnderChangesDirectory(t *testing.T) {
 	tempDir := t.TempDir()
 	repoDir := filepath.Join(tempDir, "repo")
-	workingDir := filepath.Join(repoDir, "pkg", "api")
+	changesDir := filepath.Join(repoDir, ".changes")
 
-	if err := os.MkdirAll(workingDir, 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(repoDir, "pkg", "api"), 0o755); err != nil {
 		t.Fatalf("mkdir working dir: %v", err)
 	}
 	if err := os.MkdirAll(filepath.Join(repoDir, ".git"), 0o755); err != nil {
@@ -221,7 +221,7 @@ func TestCreateChangeCreatesTargetFileUnderChangesDirectory(t *testing.T) {
 		TypeSet: true,
 	}
 
-	path, err := CreateChange(workingDir, "auth/token", params, strings.NewReader(""), bytes.NewBuffer(nil), false)
+	path, err := CreateChange(changesDir, "auth/token", params, strings.NewReader(""), bytes.NewBuffer(nil), false)
 	if err != nil {
 		t.Fatalf("CreateChange returned error: %v", err)
 	}
@@ -251,7 +251,7 @@ func TestCreateChangeReturnsValidationErrorWithoutPromptInNonInteractiveMode(t *
 	}
 
 	output := bytes.NewBuffer(nil)
-	_, err := CreateChange(repoDir, "auth/token", Params{}, strings.NewReader(""), output, false)
+	_, err := CreateChange(filepath.Join(repoDir, ".changes"), "auth/token", Params{}, strings.NewReader(""), output, false)
 	if err == nil {
 		t.Fatalf("expected error")
 	}
@@ -276,7 +276,7 @@ func TestCreateChangePromptsForPathWhenMissingInInteractiveMode(t *testing.T) {
 	params := Params{Type: "fix", TypeSet: true}
 	output := bytes.NewBuffer(nil)
 
-	path, err := CreateChange(repoDir, "", params, strings.NewReader("auth/token\n"), output, true)
+	path, err := CreateChange(filepath.Join(repoDir, ".changes"), "", params, strings.NewReader("auth/token\n"), output, true)
 	if err != nil {
 		t.Fatalf("CreateChange returned error: %v", err)
 	}
@@ -303,7 +303,7 @@ func TestCreateChangeReturnsValidationErrorWhenPathMissingNonInteractive(t *test
 		t.Fatalf("mkdir .git: %v", err)
 	}
 
-	_, err := CreateChange(repoDir, "", Params{Type: "fix", TypeSet: true}, strings.NewReader(""), bytes.NewBuffer(nil), false)
+	_, err := CreateChange(filepath.Join(repoDir, ".changes"), "", Params{Type: "fix", TypeSet: true}, strings.NewReader(""), bytes.NewBuffer(nil), false)
 	if err == nil {
 		t.Fatalf("expected error")
 	}

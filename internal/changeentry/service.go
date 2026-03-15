@@ -16,7 +16,7 @@ type Entry struct {
 	Bump      BumpLevel
 	Component []string
 	Audience  []string
-	Priority  int
+	Rank      int
 	Issue     []string
 	Release   string
 	Body      string
@@ -42,15 +42,10 @@ type Params struct {
 	DefaultAudience []string
 }
 
-func CreateChange(startPath string, targetArg string, params Params, input io.Reader, output io.Writer, interactive bool) (string, error) {
+func CreateChange(changesDir string, targetArg string, params Params, input io.Reader, output io.Writer, interactive bool) (string, error) {
 	reader := bufio.NewReader(input)
 
 	resolvedTargetArg, err := resolveTargetPathArg(targetArg, reader, output, interactive)
-	if err != nil {
-		return "", err
-	}
-
-	changesDir, err := ResolveChangesDirectory(startPath)
 	if err != nil {
 		return "", err
 	}
@@ -236,7 +231,7 @@ func collectEntry(params Params, inferredType ChangeType, reader *bufio.Reader, 
 		Bump:      bump,
 		Component: component,
 		Audience:  audience,
-		Priority:  rank,
+		Rank:      rank,
 		Issue:     issue,
 		Release:   release,
 		Body:      body,

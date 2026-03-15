@@ -170,7 +170,7 @@ func RenderJSON(cl *ChangeLog, repoRoot string, w io.Writer) error {
 					Bump:      string(entry.Entry.Bump),
 					Component: entry.Entry.Component,
 					Audience:  entry.Entry.Audience,
-					Rank:      entry.Entry.Priority,
+					Rank:      entry.Entry.Rank,
 					Issue:     entry.Entry.Issue,
 					Release:   entry.Entry.Release,
 					Preview:   entry.Preview(),

@@ -161,7 +161,7 @@ func ParseEntryWithDefaults(content string, path string, defaultAudience []strin
 		Bump:      bumpLevel,
 		Component: fm.Component,
 		Audience:  audience,
-		Priority:  fm.Rank,
+		Rank:      fm.Rank,
 		Issue:     fm.Issue,
 		Release:   strings.TrimSpace(fm.Release),
 		Body:      strings.TrimSpace(parts.body),

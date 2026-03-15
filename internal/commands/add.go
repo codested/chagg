@@ -64,6 +64,10 @@ func addAction(_ context.Context, cmd *cli.Command) error {
 		return changeentry.NewValidationError("config", "git add is disabled by git-write policy")
 	}
 
+	if err := os.MkdirAll(changesDir, 0o755); err != nil {
+		return fmt.Errorf("create changes directory: %w", err)
+	}
+
 	params := changeentry.Params{
 		Type:            cmd.String("type"),
 		TypeSet:         cmd.IsSet("type"),
@@ -85,7 +89,7 @@ func addAction(_ context.Context, cmd *cli.Command) error {
 	}
 
 	interactive := isInteractiveStdin() && !cmd.Bool("no-prompt")
-	path, err := changeentry.CreateChange(".", cmd.Args().Get(0), params, os.Stdin, os.Stdout, interactive)
+	path, err := changeentry.CreateChange(changesDir, cmd.Args().Get(0), params, os.Stdin, os.Stdout, interactive)
 	if err != nil {
 		return err
 	}
