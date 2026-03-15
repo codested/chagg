@@ -5,12 +5,11 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
-	htmltemplate "html/template"
 	"io"
 	"path/filepath"
 	"strings"
 	"text/tabwriter"
-	texttemplate "text/template"
+	"text/template"
 
 	"github.com/codested/chagg/internal/changeentry"
 )
@@ -19,9 +18,6 @@ const defaultLogPreviewMaxLen = 80
 
 //go:embed templates/changelog.md.tmpl
 var changelogTemplateSource string
-
-//go:embed templates/changelog.html.tmpl
-var changelogHTMLTemplateSource string
 
 type changelogTemplateData struct {
 	Groups []changelogTemplateGroup
@@ -38,8 +34,7 @@ type changelogTemplateTypeGroup struct {
 	EntriesBlock string
 }
 
-var changelogTemplate = texttemplate.Must(texttemplate.New("changelog.md.tmpl").Parse(changelogTemplateSource))
-var changelogHTMLTemplate = htmltemplate.Must(htmltemplate.New("changelog.html.tmpl").Parse(changelogHTMLTemplateSource))
+var changelogTemplate = template.Must(template.New("changelog.md.tmpl").Parse(changelogTemplateSource))
 
 // RenderLog writes a human-readable, columnar overview of the changelog
 // groups to w.  baseDir is used to compute display-friendly relative paths
@@ -201,66 +196,6 @@ func RenderJSON(cl *ChangeLog, w io.Writer) error {
 	return encoder.Encode(doc)
 }
 
-func RenderHTML(cl *ChangeLog, w io.Writer) error {
-	type htmlTypeGroup struct {
-		Title   string
-		Entries []string
-	}
-
-	type htmlGroup struct {
-		Heading    string
-		Date       string
-		DocsBlock  []string
-		TypeGroups []htmlTypeGroup
-	}
-
-	type htmlTemplateData struct {
-		Title  string
-		Module string
-		Groups []htmlGroup
-	}
-
-	groups := make([]htmlGroup, 0, len(cl.Groups))
-	for _, group := range cl.Groups {
-		if group.TotalEntries() == 0 {
-			continue
-		}
-
-		hg := htmlGroup{
-			Heading: group.VersionTitle(),
-			Date:    group.FormattedDate(),
-		}
-
-		for _, tg := range group.TypeGroups {
-			if tg.ChangeType == changeentry.ChangeTypeDocs {
-				docs := make([]string, 0, len(tg.Entries))
-				for _, entry := range tg.Entries {
-					docs = append(docs, docBodyText(entry))
-				}
-				hg.DocsBlock = docs
-				continue
-			}
-
-			entries := make([]string, 0, len(tg.Entries))
-			for _, entry := range tg.Entries {
-				entries = append(entries, renderHTMLEntry(entry))
-			}
-
-			hg.TypeGroups = append(hg.TypeGroups, htmlTypeGroup{Title: tg.Title, Entries: entries})
-		}
-
-		groups = append(groups, hg)
-	}
-
-	data := htmlTemplateData{
-		Title:  "Changelog",
-		Module: cl.Module.Name,
-		Groups: groups,
-	}
-
-	return changelogHTMLTemplate.Execute(w, data)
-}
-
 func pluralise(n int, singular, plural string) string {
 	if n == 1 {
 		return singular
@@ -382,24 +317,4 @@ func renderBulletEntry(entry EntryWithMeta) string {
 	}
 
 	return builder.String()
-}
-
-func renderHTMLEntry(entry EntryWithMeta) string {
-	lines := bodyBulletLines(entry.Entry.Body)
-	if len(lines) == 0 {
-		lines = []string{filepath.Base(entry.Path)}
-	}
-
-	text := lines[0]
-	if entry.Entry.Breaking {
-		text = "Breaking - " + text
-	}
-	if len(entry.Entry.Component) > 0 {
-		text += " (" + strings.Join(entry.Entry.Component, ", ") + ")"
-	}
-	if len(lines) > 1 {
-		text += " " + strings.Join(lines[1:], " ")
-	}
-
-	return text
 }

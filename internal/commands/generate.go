@@ -22,7 +22,7 @@ func GenerateCommand() *cli.Command {
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:  "format",
-				Usage: "Output format: markdown, json, html",
+				Usage: "Output format: markdown, json",
 				Value: "markdown",
 			},
 			&cli.BoolFlag{
@@ -90,10 +90,8 @@ func generateAction(_ context.Context, cmd *cli.Command) error {
 		return changelog.RenderMarkdown(cl, os.Stdout)
 	case "json":
 		return changelog.RenderJSON(cl, os.Stdout)
-	case "html":
-		return changelog.RenderHTML(cl, os.Stdout)
 	default:
-		return changeentry.NewValidationError("format", fmt.Sprintf("unsupported format %q (use markdown, json, or html)", cmd.String("format")))
+		return changeentry.NewValidationError("format", fmt.Sprintf("unsupported format %q (use markdown or json)", cmd.String("format")))
 	}
 }
 
@@ -102,8 +100,6 @@ func normalizeGenerateFormat(format string) string {
 	switch format {
 	case "md":
 		return "markdown"
-	case "htm":
-		return "html"
 	default:
 		return format
 	}
