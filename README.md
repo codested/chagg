@@ -166,12 +166,13 @@ Version assignment rules:
 
 ### `chagg generate`
 
-Generates a Markdown changelog grouped by version and change type.
+Generates a changelog grouped by version and change type.
 
-- Default: all available versions + unreleased.
-- `--latest`: only the newest tagged release.
-- `--since <version>`: include that version and newer versions.
-- `--format <markdown|json|html>`: output format (default `markdown`).
+- Default: staging changes + the most recent tagged release.
+- `--all`: all versions.
+- `--only-latest`: only the most recent tagged release, without staging changes.
+- `--since <version>`: staging + that version and all newer versions.
+- `--format <markdown|json>`: output format (default `markdown`).
 - Filters: `--audience`, `--component`, `--type`.
 - In multi-module mode, output is generated for the module associated with the current `.changes` directory.
 - If invalid change files are present, `generate` fails and asks you to run `chagg check`.

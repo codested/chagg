@@ -76,35 +76,59 @@ func VersionOnly(cl *ChangeLog, version string) *ChangeLog {
 	return &ChangeLog{Module: cl.Module}
 }
 
-// ApplyVersionFilter restricts the changelog to a subset of versions.
+// VersionFilterOptions controls which version groups are retained after loading.
 //
-//   - latestOnly: keep only the single most recent tagged version.
-//   - since: keep staging plus every tagged version >= since (groups are
-//     ordered newest-first so we walk forward until we hit the boundary).
-//
-// The two flags are mutually exclusive; latestOnly takes precedence.
-func ApplyVersionFilter(cl *ChangeLog, since string, latestOnly bool) *ChangeLog {
-	if latestOnly {
+// The options are evaluated in this order of precedence:
+//  1. All: return everything as-is.
+//  2. OnlyLatest: return only the most recent tagged version (no staging).
+//  3. Since: return staging plus every version >= Since.
+//  4. Default (nothing set): return staging + the single most recent tagged version.
+type VersionFilterOptions struct {
+	All        bool
+	OnlyLatest bool
+	Since      string
+}
+
+// ApplyVersionFilter restricts the changelog according to opts.
+func ApplyVersionFilter(cl *ChangeLog, opts VersionFilterOptions) *ChangeLog {
+	if opts.All {
+		return cl
+	}
+
+	if opts.OnlyLatest {
 		for _, g := range cl.Groups {
 			if !g.IsStaging() {
 				return &ChangeLog{Module: cl.Module, Groups: []VersionGroup{g}}
 			}
 		}
-		return cl // no tagged versions; return as-is
+		return &ChangeLog{Module: cl.Module}
 	}
 
-	if since != "" {
+	if opts.Since != "" {
 		var filtered []VersionGroup
 		for _, g := range cl.Groups {
 			filtered = append(filtered, g)
-			if !g.IsStaging() && versionMatches(g.Version, since) {
-				break // this was the boundary version; stop here
+			if !g.IsStaging() && versionMatches(g.Version, opts.Since) {
+				break
 			}
 		}
 		return &ChangeLog{Module: cl.Module, Groups: filtered}
 	}
 
-	return cl
+	// Default: staging + the single most recent tagged version.
+	var filtered []VersionGroup
+	tagCount := 0
+	for _, g := range cl.Groups {
+		if g.IsStaging() {
+			filtered = append(filtered, g)
+			continue
+		}
+		if tagCount == 0 {
+			filtered = append(filtered, g)
+			tagCount++
+		}
+	}
+	return &ChangeLog{Module: cl.Module, Groups: filtered}
 }
 
 // loadEntries walks changesDir, parses each .md file, and resolves version info.

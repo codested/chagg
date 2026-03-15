@@ -17,7 +17,8 @@ func GenerateCommand() *cli.Command {
 		Aliases: []string{"gen", "g"},
 		Usage:   "Generate a changelog from all change entries",
 		Description: "Produces a full changelog grouped by version and change type. " +
-			"Use --latest or --since to restrict the version range, " +
+			"Default shows staging changes and the most recent tagged release. " +
+			"Use --all or --since to expand the version range, --only-latest to strip staging, " +
 			"and --audience / --component / --type to filter entries.",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
@@ -26,8 +27,12 @@ func GenerateCommand() *cli.Command {
 				Value: "markdown",
 			},
 			&cli.BoolFlag{
-				Name:  "latest",
-				Usage: "Include only the most recent tagged release",
+				Name:  "all",
+				Usage: "Include all versions (default shows staging + most recent release only)",
+			},
+			&cli.BoolFlag{
+				Name:  "only-latest",
+				Usage: "Include only the most recent tagged release, without staging changes",
 			},
 			&cli.StringFlag{
 				Name:  "since",
@@ -82,7 +87,11 @@ func generateAction(_ context.Context, cmd *cli.Command) error {
 		return loadErr
 	}
 
-	cl = changelog.ApplyVersionFilter(cl, cmd.String("since"), cmd.Bool("latest"))
+	cl = changelog.ApplyVersionFilter(cl, changelog.VersionFilterOptions{
+		All:        cmd.Bool("all"),
+		OnlyLatest: cmd.Bool("only-latest"),
+		Since:      cmd.String("since"),
+	})
 
 	format := normalizeGenerateFormat(cmd.String("format"))
 	switch format {
