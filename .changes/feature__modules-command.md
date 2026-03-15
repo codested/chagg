@@ -1,0 +1,1 @@
+Add 'chagg modules' command that lists all discovered modules with their .changes directories and tag prefixes. Supports --format json for machine-readable output, making it easy for CI/CD workflows and GitHub Actions to discover which directories to watch in multi-module repositories.

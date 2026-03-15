@@ -1,0 +1,1 @@
+Add GitHub Action workflows for PR changelog preview and staging change notifications. The pr-changes workflow posts a comment on pull requests showing unreleased changes or a warning if no change entries were added. The staging-notify workflow fires on merges to main and optionally posts a Slack notification when new staging entries arrive.

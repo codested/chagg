@@ -1,0 +1,112 @@
+name: PR Changes Preview
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  preview:
+    name: Post changelog preview
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # Full history is required so chagg can assign entries to the
+          # correct tag and compare against the base branch.
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Build chagg
+        run: go build -o "$GITHUB_WORKSPACE/chagg-bin" ./cmd/chagg
+
+      # Discover all .changes directories in the repo. For a single-module
+      # repo this returns one entry; for monorepos it returns all modules.
+      - name: Discover modules
+        run: |
+          "$GITHUB_WORKSPACE/chagg-bin" modules --format json > modules.json
+          cat modules.json
+
+      # Check whether this PR adds any new change entry files.
+      # Only files added with --diff-filter=A are counted; edits to existing
+      # entries do not trigger the "no changes" warning.
+      - name: Detect new change entries
+        id: diff
+        run: |
+          has_new=false
+          while IFS= read -r dir; do
+            new_files=$(git diff --name-only --diff-filter=A \
+              "origin/${{ github.base_ref }}...HEAD" -- "$dir")
+            if [ -n "$new_files" ]; then
+              has_new=true
+              break
+            fi
+          done < <(jq -r '.[].changes_dir' modules.json)
+
+          echo "has_new=$has_new" >> "$GITHUB_OUTPUT"
+
+      # Generate the full staging preview when this PR contains new entries.
+      # For multi-module repos this shows staging across all modules.
+      - name: Generate staging preview
+        if: steps.diff.outputs.has_new == 'true'
+        run: |
+          "$GITHUB_WORKSPACE/chagg-bin" generate --only-staging > comment-body.md
+
+      # No new entries found: write a standard warning block instead.
+      - name: Write no-changes warning
+        if: steps.diff.outputs.has_new != 'true'
+        run: |
+          cat > comment-body.md << 'MDEOF'
+          > [!WARNING]
+          > **No change entries detected.**
+          >
+          > This PR does not add any files to a `.changes` directory.
+          > If it includes user-facing changes, please document them:
+          >
+          > ```
+          > chagg add <name> --type <type>
+          > ```
+          MDEOF
+
+      # Create or update the bot comment. A hidden marker keeps idempotent
+      # updates working across pushes to the same PR.
+      - name: Post or update PR comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const preview = fs.readFileSync('comment-body.md', 'utf8').trim();
+
+            const marker = '<!-- chagg-pr-preview -->';
+            const body = `${marker}\n## Changelog preview\n\n${preview}`;
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const existing = comments.find(c => c.body && c.body.includes(marker));
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
