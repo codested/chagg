@@ -16,6 +16,7 @@ func main() {
 		Name:  "chagg",
 		Usage: "A modern release-note workflow tool",
 		Commands: []*cli.Command{
+			commands.InitCommand(changeentry.NewFileConfigIO()),
 			commands.AddCommand(),
 			commands.CheckCommand(),
 			commands.LogCommand(),

@@ -1,0 +1,1 @@
+Add 'chagg init' command to bootstrap .changes directories and module configuration. Guides users through single-module or multi-module setup, warns about existing plain-version tags in multi-module mode, creates .changes directories, and writes .chagg.yaml for multi-module repos.

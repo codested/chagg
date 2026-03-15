@@ -60,10 +60,11 @@ type RawConfig struct {
 	Defaults RawDefaults    `yaml:"defaults,omitempty"`
 	Git      RawGit         `yaml:"git,omitempty"`
 	Types    []rawTypeEntry `yaml:"types,omitempty"`
-	Modules  []rawModule    `yaml:"modules,omitempty"`
+	Modules  []RawModule    `yaml:"modules,omitempty"`
 }
 
-type rawModule struct {
+// RawModule is a single entry in the repo config's modules list.
+type RawModule struct {
 	Name       string         `yaml:"name,omitempty"`
 	ChangesDir string         `yaml:"changes-dir,omitempty"`
 	TagPrefix  string         `yaml:"tag-prefix,omitempty"`
@@ -580,9 +581,9 @@ func applyGitWrite(base GitWritePolicy, raw RawGitWrite) GitWritePolicy {
 
 // ── Module lookup helpers ─────────────────────────────────────────────────────
 
-// findRawModule locates the rawModule entry matching absChangesDir.
+// findRawModule locates the RawModule entry matching absChangesDir.
 // Returns nil (no error) when the modules list is empty (unconfigured repo).
-func findRawModule(repoRoot string, modules []rawModule, absChangesDir string, configName string) (*rawModule, error) {
+func findRawModule(repoRoot string, modules []RawModule, absChangesDir string, configName string) (*RawModule, error) {
 	seenNames := map[string]bool{}
 	seenDirs := map[string]bool{}
 
@@ -616,8 +617,8 @@ func findRawModule(repoRoot string, modules []rawModule, absChangesDir string, c
 		}
 		seenNames[strings.ToLower(name)] = true
 
+		cp := modules[i]
 		if samePath(resolved, absChangesDir) {
-			cp := modules[i]
 			return &cp, nil
 		}
 	}
