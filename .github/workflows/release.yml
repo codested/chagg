@@ -36,7 +36,7 @@ jobs:
       # tail -n +3 strips the "# Changelog" header line and the blank line
       # that follows it, leaving a clean version section for the release body.
       - name: Generate release notes
-        run: ./chagg-bin generate -n 1 --no-show-staging | tail -n +3 > release-notes.md
+        run: ./chagg-bin generate -n 1 --show-staging false | tail -n +3 > release-notes.md
 
       # Cross-compile stripped binaries for all major platforms.
       - name: Build release binaries
