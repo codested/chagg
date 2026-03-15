@@ -79,22 +79,28 @@ func VersionOnly(cl *ChangeLog, version string) *ChangeLog {
 // VersionFilterOptions controls which version groups are retained after loading.
 //
 // Evaluation order:
-//  1. Since: keep staging (when ShowStaged) + every version >= Since.
-//  2. N + ShowStaged: keep up to N tagged versions newest-first, plus staging when ShowStaged.
+//  1. OnlyStaging: keep only the staging group.
+//  2. Since: keep staging (when ShowStaging) + every version >= Since.
+//  3. N + ShowStaging: keep up to N tagged versions newest-first, plus staging when ShowStaging.
 //     N = 0 means unlimited.
 type VersionFilterOptions struct {
-	N          int    // max tagged releases to include (0 = all)
-	ShowStaged bool   // include staging group
-	Since      string // lower version boundary (inclusive)
+	N           int    // max tagged releases to include (0 = all)
+	ShowStaging bool   // include staging group
+	OnlyStaging bool   // include only staging group
+	Since       string // lower version boundary (inclusive)
 }
 
 // ApplyVersionFilter restricts the changelog according to opts.
 func ApplyVersionFilter(cl *ChangeLog, opts VersionFilterOptions) *ChangeLog {
+	if opts.OnlyStaging {
+		return StagingOnly(cl)
+	}
+
 	if opts.Since != "" {
 		var filtered []VersionGroup
 		for _, g := range cl.Groups {
 			if g.IsStaging() {
-				if opts.ShowStaged {
+				if opts.ShowStaging {
 					filtered = append(filtered, g)
 				}
 				continue
@@ -111,7 +117,7 @@ func ApplyVersionFilter(cl *ChangeLog, opts VersionFilterOptions) *ChangeLog {
 	tagCount := 0
 	for _, g := range cl.Groups {
 		if g.IsStaging() {
-			if opts.ShowStaged {
+			if opts.ShowStaging {
 				filtered = append(filtered, g)
 			}
 			continue

@@ -188,6 +188,8 @@ Shows a human-friendly release preview.
 - With `version` (for example `v1.4.0`): shows changes assigned to that release.
 - Filters: `--audience`, `--component`, `--type`.
 - `--preview-length <n>` controls preview truncation length (default: `80`).
+- By default in staging view, `log` prints version hints (latest stable + next calculated tag).
+- Use `--no-version-hints` to hide those hints.
 - In multi-module mode, tags are scoped to the module's `tagPrefix`.
 - If invalid change files are present, `log` fails and asks you to run `chagg check`.
 
@@ -201,12 +203,19 @@ Version assignment rules:
 
 Generates a changelog grouped by version and change type.
 
-- Default: staging changes + the most recent tagged release (`-n 1 --show-staged`).
+- Default: staging changes + the most recent tagged release (`-n 1 --show-staging`).
 - `-n <count>`: number of tagged releases to include, newest first (default `1`, `0` = all).
-- `--no-show-staged`: omit unreleased (staging) changes.
+- `--only-staging`: include only unreleased (staging) changes.
+- `--no-show-staging`: omit unreleased (staging) changes.
 - `--since <version>`: include that version and all newer, plus staging.
 - `--format <markdown|json>`: output format (default `markdown`).
 - Filters: `--audience`, `--component`, `--type`.
+
+Constraints:
+
+- `--only-staging` cannot be combined with `--since`.
+- `--only-staging` cannot be combined with `-n`.
+- `--only-staging` cannot be combined with `--no-show-staging`.
 
 Examples:
 
@@ -217,14 +226,14 @@ chagg generate
 # all releases + staging
 chagg generate -n 0
 
-# latest release only, no staging
-chagg generate --no-show-staged
+# staging only
+chagg generate --only-staging
 
 # last 3 releases + staging
 chagg generate -n 3
 
 # all releases, no staging
-chagg generate -n 0 --no-show-staged
+chagg generate -n 0 --no-show-staging
 ```
 
 ### `chagg release`

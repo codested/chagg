@@ -17,9 +17,10 @@ func GenerateCommand() *cli.Command {
 		Aliases: []string{"gen", "g"},
 		Usage:   "Generate a changelog from all change entries",
 		Description: "Produces a full changelog grouped by version and change type. " +
-			"By default shows staging changes and the most recent tagged release (-n 1 --show-staged). " +
+			"By default shows staging changes and the most recent tagged release (-n 1 --show-staging). " +
 			"Use -n to control how many tagged releases to include (0 = all), " +
-			"--no-show-staged to omit unreleased changes, " +
+			"--only-staging for staging-only output, " +
+			"--no-show-staging to omit unreleased changes, " +
 			"--since to set a version boundary, " +
 			"and --audience / --component / --type to filter entries.",
 		Flags: []cli.Flag{
@@ -34,9 +35,13 @@ func GenerateCommand() *cli.Command {
 				Value: 1,
 			},
 			&cli.BoolFlag{
-				Name:  "show-staged",
+				Name:  "show-staging",
 				Usage: "Include unreleased (staging) changes",
 				Value: true,
+			},
+			&cli.BoolFlag{
+				Name:  "only-staging",
+				Usage: "Include only unreleased (staging) changes",
 			},
 			&cli.StringFlag{
 				Name:  "since",
@@ -60,6 +65,10 @@ func GenerateCommand() *cli.Command {
 }
 
 func generateAction(_ context.Context, cmd *cli.Command) error {
+	if err := validateGenerateFlags(cmd); err != nil {
+		return err
+	}
+
 	cwd, err := os.Getwd()
 	if err != nil {
 		return fmt.Errorf("get working directory: %w", err)
@@ -92,9 +101,10 @@ func generateAction(_ context.Context, cmd *cli.Command) error {
 	}
 
 	cl = changelog.ApplyVersionFilter(cl, changelog.VersionFilterOptions{
-		N:          cmd.Int("n"),
-		ShowStaged: cmd.Bool("show-staged"),
-		Since:      cmd.String("since"),
+		N:           cmd.Int("n"),
+		ShowStaging: cmd.Bool("show-staging"),
+		OnlyStaging: cmd.Bool("only-staging"),
+		Since:       cmd.String("since"),
 	})
 
 	format := normalizeGenerateFormat(cmd.String("format"))
@@ -106,6 +116,24 @@ func generateAction(_ context.Context, cmd *cli.Command) error {
 	default:
 		return changeentry.NewValidationError("format", fmt.Sprintf("unsupported format %q (use markdown or json)", cmd.String("format")))
 	}
+}
+
+func validateGenerateFlags(cmd *cli.Command) error {
+	if !cmd.Bool("only-staging") {
+		return nil
+	}
+
+	if strings.TrimSpace(cmd.String("since")) != "" {
+		return changeentry.NewValidationError("flags", "--only-staging cannot be combined with --since")
+	}
+	if cmd.IsSet("n") {
+		return changeentry.NewValidationError("flags", "--only-staging cannot be combined with -n")
+	}
+	if !cmd.Bool("show-staging") {
+		return changeentry.NewValidationError("flags", "--only-staging cannot be combined with --no-show-staging")
+	}
+
+	return nil
 }
 
 func normalizeGenerateFormat(format string) string {

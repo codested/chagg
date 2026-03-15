@@ -3,6 +3,7 @@ package commands
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -20,6 +21,11 @@ func LogCommand() *cli.Command {
 		Description: "Lists staging changes (since the last release) by default. " +
 			"Pass a version tag (e.g. v1.2.3) to inspect a specific release.",
 		Flags: []cli.Flag{
+			&cli.BoolFlag{
+				Name:  "version-hints",
+				Usage: "Show latest and next calculated release tag hints for staging view",
+				Value: true,
+			},
 			&cli.StringFlag{
 				Name:  "audience",
 				Usage: "Show only entries for this audience (e.g. public)",
@@ -79,9 +85,45 @@ func logAction(_ context.Context, cmd *cli.Command) error {
 	var view *changelog.ChangeLog
 	if version == "" || strings.EqualFold(version, "staging") {
 		view = changelog.StagingOnly(cl)
+		if cmd.Bool("version-hints") {
+			if err := renderLogVersionHints(repoRoot, module, cl, os.Stdout); err != nil {
+				return err
+			}
+		}
 	} else {
 		view = changelog.VersionOnly(cl, version)
 	}
 
 	return changelog.RenderLog(view, repoRoot, cmd.Int("preview-length"), os.Stdout)
+}
+
+func renderLogVersionHints(repoRoot string, module changeentry.ModuleConfig, cl *changelog.ChangeLog, w io.Writer) error {
+	tags, _ := changelog.ListSemVerTags(repoRoot, module.TagPrefix)
+	latestText, nextText := computeVersionHints(module, tags, cl)
+
+	_, _ = fmt.Fprintf(w, "Latest stable tag: %s\n", latestText)
+	_, _ = fmt.Fprintf(w, "Next calculated tag: %s\n\n", nextText)
+	return nil
+}
+
+func computeVersionHints(module changeentry.ModuleConfig, tags []changelog.Tag, cl *changelog.ChangeLog) (string, string) {
+	latestTag, hasLatest := latestStableTag(tags)
+
+	latestText := "none"
+	if hasLatest {
+		latestText = latestTag.Name
+	}
+
+	nextText := "none (no staging changes)"
+	staging := changelog.StagingOnly(cl)
+	if len(staging.Groups) > 0 && staging.Groups[0].TotalEntries() > 0 {
+		if !hasLatest {
+			nextText = module.TagPrefix + "0.1.0"
+		} else {
+			next := bumpVersion(latestTag.Version, detectBumpLevel(staging.Groups[0]))
+			nextText = module.TagPrefix + next.String(latestTag.HasVPrefix)
+		}
+	}
+
+	return latestText, nextText
 }
