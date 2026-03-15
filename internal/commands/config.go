@@ -10,6 +10,7 @@ import (
 	"text/tabwriter"
 
 	"github.com/codested/chagg/internal/changeentry"
+	"github.com/codested/chagg/internal/gitutil"
 	"github.com/urfave/cli/v3"
 )
 
@@ -350,7 +351,7 @@ func resolveModuleOrDefault(cio changeentry.ConfigIO) (changeentry.ModuleConfig,
 	if err != nil {
 		return changeentry.ModuleConfig{}, fmt.Errorf("get working directory: %w", err)
 	}
-	repoRoot, _, err := changeentry.FindGitRoot(cwd)
+	repoRoot, _, err := gitutil.FindGitRoot(cwd)
 	if err != nil {
 		return changeentry.ModuleConfig{}, err
 	}
@@ -366,7 +367,7 @@ func requireGitRoot() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("get working directory: %w", err)
 	}
-	repoRoot, _, err := changeentry.FindGitRoot(cwd)
+	repoRoot, _, err := gitutil.FindGitRoot(cwd)
 	return repoRoot, err
 }
 

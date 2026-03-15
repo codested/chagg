@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/codested/chagg/internal/changeentry"
+	"github.com/codested/chagg/internal/gitutil"
 )
 
 func TestLoadChangeLogReturnsValidationErrorForInvalidEntries(t *testing.T) {
@@ -92,13 +93,13 @@ func mustInitGitRepo(t *testing.T, repoDir string) {
 		t.Fatalf("mkdir repo: %v", err)
 	}
 
-	if _, err := runGit(repoDir, "init"); err != nil {
+	if _, err := gitutil.RunGit(repoDir, "init"); err != nil {
 		t.Fatalf("git init: %v", err)
 	}
-	if _, err := runGit(repoDir, "config", "user.name", "chagg-test"); err != nil {
+	if _, err := gitutil.RunGit(repoDir, "config", "user.name", "chagg-test"); err != nil {
 		t.Fatalf("git config user.name: %v", err)
 	}
-	if _, err := runGit(repoDir, "config", "user.email", "chagg-test@example.com"); err != nil {
+	if _, err := gitutil.RunGit(repoDir, "config", "user.email", "chagg-test@example.com"); err != nil {
 		t.Fatalf("git config user.email: %v", err)
 	}
 }
@@ -106,10 +107,10 @@ func mustInitGitRepo(t *testing.T, repoDir string) {
 func mustGitAddCommit(t *testing.T, repoDir string, message string) {
 	t.Helper()
 
-	if _, err := runGit(repoDir, "add", "."); err != nil {
+	if _, err := gitutil.RunGit(repoDir, "add", "."); err != nil {
 		t.Fatalf("git add: %v", err)
 	}
-	if _, err := runGit(repoDir, "commit", "-m", message); err != nil {
+	if _, err := gitutil.RunGit(repoDir, "commit", "-m", message); err != nil {
 		t.Fatalf("git commit: %v", err)
 	}
 }
@@ -117,7 +118,7 @@ func mustGitAddCommit(t *testing.T, repoDir string, message string) {
 func mustGitTag(t *testing.T, repoDir string, tag string) {
 	t.Helper()
 
-	if _, err := runGit(repoDir, "tag", tag); err != nil {
+	if _, err := gitutil.RunGit(repoDir, "tag", tag); err != nil {
 		t.Fatalf("git tag %s: %v", tag, err)
 	}
 }

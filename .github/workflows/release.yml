@@ -3,7 +3,7 @@ name: Release
 on:
   push:
     tags:
-      - 'v[0-9]+.[0-9]+.[0-9]+*'
+      - 'v?[0-9]+.[0-9]+.[0-9]+*'
 
 permissions:
   contents: write
@@ -60,7 +60,7 @@ jobs:
       - name: Determine release type
         id: release_type
         run: |
-          if [[ "${{ github.ref_name }}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          if [[ "${{ github.ref_name }}" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "prerelease=" >> "$GITHUB_OUTPUT"
           else
             echo "prerelease=--prerelease" >> "$GITHUB_OUTPUT"

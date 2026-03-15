@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/codested/chagg/internal/changeentry"
+	"github.com/codested/chagg/internal/gitutil"
 	"github.com/urfave/cli/v3"
 )
 
@@ -41,7 +42,7 @@ func addAction(_ context.Context, cmd *cli.Command) error {
 		return fmt.Errorf("get working directory: %w", err)
 	}
 
-	repoRoot, hasGitRoot, err := changeentry.FindGitRoot(cwd)
+	repoRoot, hasGitRoot, err := gitutil.FindGitRoot(cwd)
 	if err != nil {
 		return err
 	}

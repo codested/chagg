@@ -5,11 +5,12 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/codested/chagg/internal/changeentry"
+	"github.com/codested/chagg/internal/gitutil"
+	"github.com/codested/chagg/internal/semver"
 )
 
 // LoadChangeLog reads every .md file from changesDir, resolves each file's
@@ -20,7 +21,7 @@ import (
 // When git is available but tag metadata cannot be read, an error is returned.
 // File-system errors are returned as-is.
 func LoadChangeLog(repoRoot string, module changeentry.ModuleConfig, filter FilterOptions) (*ChangeLog, error) {
-	tags, err := ListSemVerTags(repoRoot, module.TagPrefix)
+	tags, err := gitutil.ListSemVerTags(repoRoot, module.TagPrefix)
 	if err != nil {
 		return nil, fmt.Errorf("load version tags: %w", err)
 	}
@@ -118,7 +119,7 @@ func ApplyVersionFilter(cl *ChangeLog, opts VersionFilterOptions) *ChangeLog {
 }
 
 // loadEntries walks changesDir, parses each .md file, and resolves version info.
-func loadEntries(repoRoot string, module changeentry.ModuleConfig, tags []Tag) ([]EntryWithMeta, []InvalidEntry, error) {
+func loadEntries(repoRoot string, module changeentry.ModuleConfig, tags []semver.Tag) ([]EntryWithMeta, []InvalidEntry, error) {
 	changesDir := module.ChangesDir
 	if _, statErr := os.Stat(changesDir); os.IsNotExist(statErr) {
 		return nil, nil, nil
@@ -145,7 +146,7 @@ func loadEntries(repoRoot string, module changeentry.ModuleConfig, tags []Tag) (
 
 		// Per-file lookup keeps --follow semantics so moved files are attributed
 		// to the commit where they originally entered history.
-		addedAt, addedCommitHash, originalFilename, hasGit := FileAddedMeta(repoRoot, path)
+		addedAt, addedCommitHash, originalFilename, hasGit := gitutil.FileAddedMeta(repoRoot, path)
 
 		version := resolveVersion(entry, addedAt, hasGit, tags)
 
@@ -218,7 +219,7 @@ func pluralizeCount(n int, singular, plural string) string {
 //  2. Git history: file is assigned to the earliest tag whose commit date
 //     is >= the file's add date.
 //  3. Fallback: "staging".
-func resolveVersion(entry changeentry.Entry, addedAt time.Time, hasGit bool, tags []Tag) string {
+func resolveVersion(entry changeentry.Entry, addedAt time.Time, hasGit bool, tags []semver.Tag) string {
 	if entry.Release != "" {
 		for _, tag := range tags {
 			if releaseMatchesTag(entry.Release, tag) {
@@ -243,7 +244,7 @@ func resolveVersion(entry changeentry.Entry, addedAt time.Time, hasGit bool, tag
 	return "staging"
 }
 
-func buildChangeLog(entries []EntryWithMeta, tags []Tag, module changeentry.ModuleConfig) *ChangeLog {
+func buildChangeLog(entries []EntryWithMeta, tags []semver.Tag, module changeentry.ModuleConfig) *ChangeLog {
 	groupMap := make(map[string][]EntryWithMeta)
 	for _, e := range entries {
 		groupMap[e.Version] = append(groupMap[e.Version], e)
@@ -282,7 +283,7 @@ func buildChangeLog(entries []EntryWithMeta, tags []Tag, module changeentry.Modu
 	return &ChangeLog{Groups: groups}
 }
 
-func buildVersionGroup(version string, tag *Tag, entries []EntryWithMeta, module changeentry.ModuleConfig) VersionGroup {
+func buildVersionGroup(version string, tag *semver.Tag, entries []EntryWithMeta, module changeentry.ModuleConfig) VersionGroup {
 	// Sort: rank desc (higher first), then addedAt desc, then path asc (deterministic).
 	sort.SliceStable(entries, func(i, j int) bool {
 		if entries[i].Entry.Rank != entries[j].Entry.Rank {
@@ -356,20 +357,20 @@ func versionMatches(a, b string) bool {
 		return true
 	}
 
-	aVersion, _, aErr := ParseSemVersion(semverFromTag(a))
-	bVersion, _, bErr := ParseSemVersion(semverFromTag(b))
+	aVersion, _, aErr := semver.ParseSemVersion(semverFromTag(a))
+	bVersion, _, bErr := semver.ParseSemVersion(semverFromTag(b))
 	if aErr != nil || bErr != nil {
 		return strings.EqualFold(stripV(semverFromTag(a)), stripV(semverFromTag(b)))
 	}
 
-	return CompareSemVersion(aVersion, bVersion) == 0
+	return semver.CompareSemVersion(aVersion, bVersion) == 0
 }
 
 func stripV(v string) string {
 	return strings.TrimPrefix(strings.TrimSpace(v), "v")
 }
 
-func releaseMatchesTag(release string, tag Tag) bool {
+func releaseMatchesTag(release string, tag semver.Tag) bool {
 	trimmed := strings.TrimSpace(release)
 	if strings.EqualFold(trimmed, tag.Name) {
 		return true
@@ -379,12 +380,12 @@ func releaseMatchesTag(release string, tag Tag) bool {
 		return true
 	}
 
-	releaseVersion, _, err := ParseSemVersion(semverFromTag(trimmed))
+	releaseVersion, _, err := semver.ParseSemVersion(semverFromTag(trimmed))
 	if err != nil {
 		return false
 	}
 
-	return CompareSemVersion(releaseVersion, tag.Version) == 0
+	return semver.CompareSemVersion(releaseVersion, tag.Version) == 0
 }
 
 func semverFromTag(value string) string {
@@ -395,38 +396,9 @@ func semverFromTag(value string) string {
 	}
 
 	candidate := trimmed[index+1:]
-	if _, _, err := ParseSemVersion(candidate); err == nil {
+	if _, _, err := semver.ParseSemVersion(candidate); err == nil {
 		return candidate
 	}
 
 	return trimmed
-}
-
-func NextPreReleaseLabelVersion(base SemVersion, label string, tags []Tag) SemVersion {
-	next := base
-	next.PreRelease = label + ".1"
-	next.Build = ""
-
-	maxN := 0
-	prefix := label + "."
-	for _, tag := range tags {
-		if tag.Version.Major != base.Major || tag.Version.Minor != base.Minor || tag.Version.Patch != base.Patch {
-			continue
-		}
-		if !strings.HasPrefix(tag.Version.PreRelease, prefix) {
-			continue
-		}
-
-		nPart := strings.TrimPrefix(tag.Version.PreRelease, prefix)
-		n, err := strconv.Atoi(nPart)
-		if err != nil {
-			continue
-		}
-		if n > maxN {
-			maxN = n
-		}
-	}
-
-	next.PreRelease = fmt.Sprintf("%s.%d", label, maxN+1)
-	return next
 }

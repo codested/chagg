@@ -5,6 +5,7 @@ import (
 
 	"github.com/codested/chagg/internal/changeentry"
 	"github.com/codested/chagg/internal/changelog"
+	"github.com/codested/chagg/internal/semver"
 )
 
 func TestComputeVersionHintsNoTagsNoStaging(t *testing.T) {
@@ -41,9 +42,9 @@ func TestComputeVersionHintsNoTagsWithStaging(t *testing.T) {
 }
 
 func TestComputeVersionHintsWithLatestTagAndStaging(t *testing.T) {
-	tags := []changelog.Tag{{
+	tags := []semver.Tag{{
 		Name:       "v1.2.3",
-		Version:    changelog.SemVersion{Major: 1, Minor: 2, Patch: 3},
+		Version:    semver.SemVersion{Major: 1, Minor: 2, Patch: 3},
 		HasVPrefix: true,
 	}}
 	cl := &changelog.ChangeLog{

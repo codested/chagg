@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/codested/chagg/internal/changeentry"
+	"github.com/codested/chagg/internal/gitutil"
 	"github.com/urfave/cli/v3"
 )
 
@@ -32,7 +33,7 @@ func checkAction(_ context.Context, _ *cli.Command) error {
 		return err
 	}
 
-	repoRoot, _, err := changeentry.FindGitRoot(cwd)
+	repoRoot, _, err := gitutil.FindGitRoot(cwd)
 	if err != nil {
 		return err
 	}

@@ -5,10 +5,11 @@ import (
 
 	"github.com/codested/chagg/internal/changeentry"
 	"github.com/codested/chagg/internal/changelog"
+	"github.com/codested/chagg/internal/semver"
 )
 
 func TestBumpVersionPatch(t *testing.T) {
-	version := bumpVersion(changelog.SemVersion{Major: 1, Minor: 2, Patch: 3}, bumpPatch)
+	version := semver.Bump(semver.SemVersion{Major: 1, Minor: 2, Patch: 3}, semver.BumpPatch)
 
 	if version.String(true) != "v1.2.4" {
 		t.Fatalf("expected v1.2.4, got %s", version.String(true))
@@ -16,7 +17,7 @@ func TestBumpVersionPatch(t *testing.T) {
 }
 
 func TestBumpVersionMinor(t *testing.T) {
-	version := bumpVersion(changelog.SemVersion{Major: 1, Minor: 2, Patch: 3}, bumpMinor)
+	version := semver.Bump(semver.SemVersion{Major: 1, Minor: 2, Patch: 3}, semver.BumpMinor)
 
 	if version.String(false) != "1.3.0" {
 		t.Fatalf("expected 1.3.0, got %s", version.String(false))
@@ -24,7 +25,7 @@ func TestBumpVersionMinor(t *testing.T) {
 }
 
 func TestBumpVersionMajor(t *testing.T) {
-	version := bumpVersion(changelog.SemVersion{Major: 1, Minor: 2, Patch: 3}, bumpMajor)
+	version := semver.Bump(semver.SemVersion{Major: 1, Minor: 2, Patch: 3}, semver.BumpMajor)
 
 	if version.String(true) != "v2.0.0" {
 		t.Fatalf("expected v2.0.0, got %s", version.String(true))
@@ -32,12 +33,12 @@ func TestBumpVersionMajor(t *testing.T) {
 }
 
 func TestLatestStableTagPrefersStableOverPreRelease(t *testing.T) {
-	tags := []changelog.Tag{
-		{Name: "v1.2.0-beta.1", Version: changelog.SemVersion{Major: 1, Minor: 2, Patch: 0, PreRelease: "beta.1"}},
-		{Name: "v1.1.0", Version: changelog.SemVersion{Major: 1, Minor: 1, Patch: 0}},
+	tags := []semver.Tag{
+		{Name: "v1.2.0-beta.1", Version: semver.SemVersion{Major: 1, Minor: 2, Patch: 0, PreRelease: "beta.1"}},
+		{Name: "v1.1.0", Version: semver.SemVersion{Major: 1, Minor: 1, Patch: 0}},
 	}
 
-	tag, ok := latestStableTag(tags)
+	tag, ok := semver.LatestStable(tags)
 	if !ok {
 		t.Fatalf("expected a stable tag")
 	}
@@ -56,7 +57,7 @@ func TestDetectBumpLevelMajorForBumpOverride(t *testing.T) {
 		}},
 	}
 
-	if level := detectBumpLevel(group, changeentry.DefaultTypeRegistry()); level != bumpMajor {
+	if level := detectBumpLevel(group, changeentry.DefaultTypeRegistry()); level != semver.BumpMajor {
 		t.Fatalf("expected major bump, got %d", level)
 	}
 }
@@ -70,7 +71,7 @@ func TestDetectBumpLevelMinorForFeature(t *testing.T) {
 		}},
 	}
 
-	if level := detectBumpLevel(group, changeentry.DefaultTypeRegistry()); level != bumpMinor {
+	if level := detectBumpLevel(group, changeentry.DefaultTypeRegistry()); level != semver.BumpMinor {
 		t.Fatalf("expected minor bump, got %d", level)
 	}
 }
@@ -84,7 +85,7 @@ func TestDetectBumpLevelMinorForRemoval(t *testing.T) {
 		}},
 	}
 
-	if level := detectBumpLevel(group, changeentry.DefaultTypeRegistry()); level != bumpMinor {
+	if level := detectBumpLevel(group, changeentry.DefaultTypeRegistry()); level != semver.BumpMinor {
 		t.Fatalf("expected minor bump for removal (type default), got %d", level)
 	}
 }
@@ -98,7 +99,7 @@ func TestDetectBumpLevelPatchForFix(t *testing.T) {
 		}},
 	}
 
-	if level := detectBumpLevel(group, changeentry.DefaultTypeRegistry()); level != bumpPatch {
+	if level := detectBumpLevel(group, changeentry.DefaultTypeRegistry()); level != semver.BumpPatch {
 		t.Fatalf("expected patch bump, got %d", level)
 	}
 }

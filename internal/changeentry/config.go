@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/codested/chagg/internal/gitutil"
 	"gopkg.in/yaml.v3"
 )
 
@@ -203,7 +204,7 @@ func ResolveModuleForChangesDir(repoRoot string, changesDir string) (ModuleConfi
 				fmt.Sprintf("no module in %s matches changes directory %s", configName, absChangesDir))
 		} else {
 			// No modules declared: validate auto-inferred names don't collide.
-			discoveredDirs, discoverErr := FindAllChangesDirs(repoRoot)
+			discoveredDirs, discoverErr := gitutil.FindAllChangesDirs(repoRoot)
 			if discoverErr != nil {
 				return ModuleConfig{}, discoverErr
 			}
@@ -216,7 +217,7 @@ func ResolveModuleForChangesDir(repoRoot string, changesDir string) (ModuleConfi
 		}
 	} else {
 		// No repo config: validate auto-inferred names don't collide.
-		discoveredDirs, discoverErr := FindAllChangesDirs(repoRoot)
+		discoveredDirs, discoverErr := gitutil.FindAllChangesDirs(repoRoot)
 		if discoverErr != nil {
 			return ModuleConfig{}, discoverErr
 		}

@@ -1,4 +1,4 @@
-package changelog
+package semver
 
 import "testing"
 

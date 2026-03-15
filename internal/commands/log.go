@@ -9,6 +9,8 @@ import (
 
 	"github.com/codested/chagg/internal/changeentry"
 	"github.com/codested/chagg/internal/changelog"
+	"github.com/codested/chagg/internal/gitutil"
+	"github.com/codested/chagg/internal/semver"
 	"github.com/urfave/cli/v3"
 )
 
@@ -54,7 +56,7 @@ func logAction(_ context.Context, cmd *cli.Command) error {
 		return fmt.Errorf("get working directory: %w", err)
 	}
 
-	repoRoot, _, err := changeentry.FindGitRoot(cwd)
+	repoRoot, _, err := gitutil.FindGitRoot(cwd)
 	if err != nil {
 		return err
 	}
@@ -98,7 +100,7 @@ func logAction(_ context.Context, cmd *cli.Command) error {
 }
 
 func renderLogVersionHints(repoRoot string, module changeentry.ModuleConfig, cl *changelog.ChangeLog, w io.Writer) error {
-	tags, _ := changelog.ListSemVerTags(repoRoot, module.TagPrefix)
+	tags, _ := gitutil.ListSemVerTags(repoRoot, module.TagPrefix)
 	latestText, nextText := computeVersionHints(module, tags, cl)
 
 	_, _ = fmt.Fprintf(w, "Latest stable tag: %s\n", latestText)
@@ -106,8 +108,8 @@ func renderLogVersionHints(repoRoot string, module changeentry.ModuleConfig, cl 
 	return nil
 }
 
-func computeVersionHints(module changeentry.ModuleConfig, tags []changelog.Tag, cl *changelog.ChangeLog) (string, string) {
-	latestTag, hasLatest := latestStableTag(tags)
+func computeVersionHints(module changeentry.ModuleConfig, tags []semver.Tag, cl *changelog.ChangeLog) (string, string) {
+	latestTag, hasLatest := semver.LatestStable(tags)
 
 	latestText := "none"
 	if hasLatest {
@@ -120,7 +122,7 @@ func computeVersionHints(module changeentry.ModuleConfig, tags []changelog.Tag, 
 		if !hasLatest {
 			nextText = module.TagPrefix + "0.1.0"
 		} else {
-			next := bumpVersion(latestTag.Version, detectBumpLevel(staging.Groups[0], module.Types))
+			next := semver.Bump(latestTag.Version, detectBumpLevel(staging.Groups[0], module.Types))
 			nextText = module.TagPrefix + next.String(latestTag.HasVPrefix)
 		}
 	}

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/codested/chagg/internal/changeentry"
+	"github.com/codested/chagg/internal/semver"
 )
 
 // EntryWithMeta pairs a parsed change entry with the metadata derived from
@@ -58,8 +59,8 @@ type TypeGroup struct {
 
 // VersionGroup holds all entries attributed to one version (or staging).
 type VersionGroup struct {
-	Version    string // "staging" or a version tag/release name
-	Tag        *Tag   // nil for staging and pinned-but-untagged versions
+	Version    string      // "staging" or a version tag/release name
+	Tag        *semver.Tag // nil for staging and pinned-but-untagged versions
 	TypeGroups []TypeGroup
 }
 

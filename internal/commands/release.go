@@ -11,6 +11,8 @@ import (
 
 	"github.com/codested/chagg/internal/changeentry"
 	"github.com/codested/chagg/internal/changelog"
+	"github.com/codested/chagg/internal/gitutil"
+	"github.com/codested/chagg/internal/semver"
 	"github.com/urfave/cli/v3"
 )
 
@@ -47,12 +49,6 @@ func ReleaseCommand() *cli.Command {
 
 var semverIdentifierPattern = regexp.MustCompile(`^[0-9A-Za-z.-]+$`)
 
-const (
-	bumpPatch = iota
-	bumpMinor
-	bumpMajor
-)
-
 func releaseAction(_ context.Context, cmd *cli.Command) error {
 	mode, err := resolveReleaseMode(cmd)
 	if err != nil {
@@ -64,7 +60,7 @@ func releaseAction(_ context.Context, cmd *cli.Command) error {
 		return fmt.Errorf("get working directory: %w", err)
 	}
 
-	repoRoot, _, err := changeentry.FindGitRoot(cwd)
+	repoRoot, _, err := gitutil.FindGitRoot(cwd)
 	if err != nil {
 		return err
 	}
@@ -103,7 +99,7 @@ func releaseAction(_ context.Context, cmd *cli.Command) error {
 		return nil
 	}
 
-	tags, err := changelog.ListSemVerTags(repoRoot, module.TagPrefix)
+	tags, err := gitutil.ListSemVerTags(repoRoot, module.TagPrefix)
 	if err != nil {
 		return err
 	}
@@ -118,9 +114,9 @@ func releaseAction(_ context.Context, cmd *cli.Command) error {
 		return changeentry.NewValidationError("build", "--build must contain only [0-9A-Za-z.-]")
 	}
 
-	latestStableTag, hasStableTag := latestStableTag(tags)
+	latestTag, hasStableTag := semver.LatestStable(tags)
 
-	var nextVersion changelog.SemVersion
+	var nextVersion semver.SemVersion
 	withVPrefix := true
 
 	if !hasStableTag {
@@ -129,20 +125,20 @@ func releaseAction(_ context.Context, cmd *cli.Command) error {
 			return promptErr
 		}
 
-		parsedVersion, hasVPrefix, parseErr := changelog.ParseSemVersion(enteredVersion)
+		parsedVersion, hasVPrefix, parseErr := semver.ParseSemVersion(enteredVersion)
 		if parseErr != nil {
 			return changeentry.NewValidationError("version", fmt.Sprintf("invalid SemVer version: %q", enteredVersion))
 		}
 		nextVersion = parsedVersion
 		withVPrefix = hasVPrefix
 	} else {
-		withVPrefix = latestStableTag.HasVPrefix
+		withVPrefix = latestTag.HasVPrefix
 		bump := detectBumpLevel(staging.Groups[0], module.Types)
-		nextVersion = bumpVersion(latestStableTag.Version, bump)
+		nextVersion = semver.Bump(latestTag.Version, bump)
 	}
 
 	if preReleaseLabel != "" {
-		nextVersion = changelog.NextPreReleaseLabelVersion(nextVersion, preReleaseLabel, tags)
+		nextVersion = semver.NextPreReleaseLabelVersion(nextVersion, preReleaseLabel, tags)
 	}
 
 	if buildMetadata != "" {
@@ -222,14 +218,14 @@ func (m releaseMode) requiresGitWrites() bool {
 }
 
 func detectBumpLevel(group changelog.VersionGroup, registry changeentry.TypeRegistry) int {
-	level := bumpPatch
+	level := semver.BumpPatch
 	for _, tg := range group.TypeGroups {
 		for _, entry := range tg.Entries {
 			entryLevel := effectiveBumpInt(entry.Entry, registry)
 			if entryLevel > level {
 				level = entryLevel
-				if level == bumpMajor {
-					return bumpMajor
+				if level == semver.BumpMajor {
+					return semver.BumpMajor
 				}
 			}
 		}
@@ -247,30 +243,12 @@ func effectiveBumpInt(entry changeentry.Entry, registry changeentry.TypeRegistry
 	}
 	switch bump {
 	case changeentry.BumpLevelMajor:
-		return bumpMajor
+		return semver.BumpMajor
 	case changeentry.BumpLevelMinor:
-		return bumpMinor
+		return semver.BumpMinor
 	default:
-		return bumpPatch
+		return semver.BumpPatch
 	}
-}
-
-func bumpVersion(version changelog.SemVersion, level int) changelog.SemVersion {
-	next := changelog.SemVersion{Major: version.Major, Minor: version.Minor, Patch: version.Patch}
-
-	switch level {
-	case bumpMajor:
-		next.Major++
-		next.Minor = 0
-		next.Patch = 0
-	case bumpMinor:
-		next.Minor++
-		next.Patch = 0
-	default:
-		next.Patch++
-	}
-
-	return next
 }
 
 func promptFirstVersion(input *os.File, output *os.File, interactive bool) (string, error) {
@@ -352,14 +330,4 @@ func pluralize(n int, singular string, plural string) string {
 	}
 
 	return plural
-}
-
-func latestStableTag(tags []changelog.Tag) (changelog.Tag, bool) {
-	for i := len(tags) - 1; i >= 0; i-- {
-		if !tags[i].Version.IsPreRelease() {
-			return tags[i], true
-		}
-	}
-
-	return changelog.Tag{}, false
 }

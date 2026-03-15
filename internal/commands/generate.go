@@ -8,6 +8,7 @@ import (
 
 	"github.com/codested/chagg/internal/changeentry"
 	"github.com/codested/chagg/internal/changelog"
+	"github.com/codested/chagg/internal/gitutil"
 	"github.com/urfave/cli/v3"
 )
 
@@ -74,7 +75,7 @@ func generateAction(_ context.Context, cmd *cli.Command) error {
 		return fmt.Errorf("get working directory: %w", err)
 	}
 
-	repoRoot, _, err := changeentry.FindGitRoot(cwd)
+	repoRoot, _, err := gitutil.FindGitRoot(cwd)
 	if err != nil {
 		return err
 	}

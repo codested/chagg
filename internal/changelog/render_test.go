@@ -9,13 +9,14 @@ import (
 	"time"
 
 	"github.com/codested/chagg/internal/changeentry"
+	"github.com/codested/chagg/internal/semver"
 )
 
 func TestRenderMarkdownOmitsDateAndIncludesIndentedFullBody(t *testing.T) {
 	changeLog := &ChangeLog{
 		Groups: []VersionGroup{{
 			Version: "v1.2.3",
-			Tag: &Tag{
+			Tag: &semver.Tag{
 				Name:       "v1.2.3",
 				CommitDate: time.Date(2026, 3, 14, 0, 0, 0, 0, time.UTC),
 			},
