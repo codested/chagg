@@ -80,7 +80,7 @@ func TestResolveModuleForChangesDirRootTagPrefixIsEmpty(t *testing.T) {
 	}
 }
 
-func TestResolveModuleForChangesDirAppliesGlobalGitWriteAllowBool(t *testing.T) {
+func TestResolveModuleForChangesDirAppliesUserGitWriteAllowBool(t *testing.T) {
 	tempDir := t.TempDir()
 	repoDir := filepath.Join(tempDir, "repo")
 	changesDir := filepath.Join(repoDir, ".changes")
@@ -92,10 +92,17 @@ func TestResolveModuleForChangesDirAppliesGlobalGitWriteAllowBool(t *testing.T) 
 		t.Fatalf("mkdir .git: %v", err)
 	}
 
-	config := "git-write:\n  allow: false\nmodules:\n  - name: default\n    changes-dir: .changes\n"
+	config := "modules:\n  - name: default\n    changes-dir: .changes\n"
 	if err := os.WriteFile(filepath.Join(repoDir, ".chagg.yaml"), []byte(config), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
+
+	userConfig := "git:\n  write:\n    allow: false\n"
+	userConfigPath := filepath.Join(tempDir, "user-config.yaml")
+	if err := os.WriteFile(userConfigPath, []byte(userConfig), 0o644); err != nil {
+		t.Fatalf("write user config: %v", err)
+	}
+	t.Setenv(UserConfigEnvVar, userConfigPath)
 
 	module, err := ResolveModuleForChangesDir(repoDir, changesDir)
 	if err != nil {
@@ -235,7 +242,7 @@ func TestResolveModulesForChangesDirsFailsWhenInferredNamesCollideWithoutConfig(
 	}
 }
 
-func TestResolveModuleForChangesDirAppliesGlobalGitWriteAllowObject(t *testing.T) {
+func TestResolveModuleForChangesDirAppliesUserGitWriteAllowObject(t *testing.T) {
 	tempDir := t.TempDir()
 	repoDir := filepath.Join(tempDir, "repo")
 	changesDir := filepath.Join(repoDir, ".changes")
@@ -247,10 +254,17 @@ func TestResolveModuleForChangesDirAppliesGlobalGitWriteAllowObject(t *testing.T
 		t.Fatalf("mkdir .git: %v", err)
 	}
 
-	config := "git-write:\n  allow:\n    add-change: false\n    push-release-tag: false\nmodules:\n  - name: default\n    changes-dir: .changes\n"
+	config := "modules:\n  - name: default\n    changes-dir: .changes\n"
 	if err := os.WriteFile(filepath.Join(repoDir, ".chagg.yaml"), []byte(config), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
+
+	userConfig := "git:\n  write:\n    operations:\n      add-change: false\n      create-release-tag: true\n      push-release-tag: false\n"
+	userConfigPath := filepath.Join(tempDir, "user-config.yaml")
+	if err := os.WriteFile(userConfigPath, []byte(userConfig), 0o644); err != nil {
+		t.Fatalf("write user config: %v", err)
+	}
+	t.Setenv(UserConfigEnvVar, userConfigPath)
 
 	module, err := ResolveModuleForChangesDir(repoDir, changesDir)
 	if err != nil {

@@ -59,24 +59,26 @@ Rules:
 - If two discovered `.changes` directories infer the same module name, commands fail until you disambiguate with explicit `modules` entries.
 - Supported config file names at repo root: `.chagg.yaml`, `.chagg.yml`, `chagg.yml`.
 
-Optional global git-write policy:
+User git-write policy is configured in a user-level config file (not per-repo):
+
+- macOS/Linux: `~/.config/chagg/config.yaml`
+- Windows: `%AppData%/chagg/config.yaml`
 
 ```yaml
-git-write:
-  allow: false
-```
-```yaml
-# OR granular controls:
-git-write:
-  allow:
-    add-change: true
-    push-release-tag: false
+git:
+  write:
+    allow: true
+    operations:
+      add-change: true
+      create-release-tag: true
+      push-release-tag: false
 ```
 
-- `git-write.allow`: global kill-switch for write operations.
-- `git-write.allow.add-change`: allow/disallow staging new change files.
-- `git-write.allow.push-release-tag`: allow/disallow automatic `chagg release --push`.
-- Omit `git-write` entirely to use built-in defaults (all allowed).
+- `git.write.allow`: global kill-switch for write operations.
+- `git.write.operations.add-change`: allow/disallow staging new change files.
+- `git.write.operations.create-release-tag`: allow/disallow creating local release tags.
+- `git.write.operations.push-release-tag`: allow/disallow automatic `chagg release --push`.
+- Omit user config entirely to use built-in defaults (all allowed).
 
 Optional default audience:
 
@@ -241,7 +243,7 @@ Creates the next release tag from current staging changes.
 - `--push`: pushes the newly created tag to `origin` automatically.
 - In multi-module mode, created tags are prefixed with module `tagPrefix`.
 - Release requires a clean Git working tree (no staged/unstaged/untracked changes).
-- Git write operations are gated by global `git-write` policy from config.
+- Git write operations are gated by user-level `git.write` policy from the user config file.
 
 Suffix handling:
 

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 
@@ -12,6 +13,8 @@ import (
 )
 
 var ConfigFileNames = []string{".chagg.yaml", ".chagg.yml", "chagg.yml"}
+
+const UserConfigEnvVar = "CHAGG_USER_CONFIG"
 
 type ModuleConfig struct {
 	Name            string
@@ -51,7 +54,6 @@ func (p GitWritePolicy) AllowsReleasePush() bool {
 
 type configFile struct {
 	DefaultAudience audienceConfig `yaml:"default-audience"`
-	GitWrite        GitWriteConfig `yaml:"git-write"`
 	Modules         []configModule `yaml:"modules"`
 }
 
@@ -59,10 +61,6 @@ type configModule struct {
 	Name       string `yaml:"name"`
 	ChangesDir string `yaml:"changes-dir"`
 	TagPrefix  string `yaml:"tag-prefix"`
-}
-
-type GitWriteConfig struct {
-	Allow GitWriteAllowConfig `yaml:"allow"`
 }
 
 type audienceConfig []string
@@ -100,52 +98,34 @@ func (a *audienceConfig) UnmarshalYAML(node *yaml.Node) error {
 	}
 }
 
-// GitWriteAllowConfig accepts either:
-//   - allow: true|false
-//   - allow:
-//     add-change: true|false
-//     push-release-tag: true|false
-type GitWriteAllowConfig struct {
-	IsSet          bool
-	Value          bool
-	AddChange      *bool
-	PushReleaseTag *bool
+type userConfigFile struct {
+	Git userConfigGit `yaml:"git"`
 }
 
-func (c *GitWriteAllowConfig) UnmarshalYAML(node *yaml.Node) error {
-	c.IsSet = true
+type userConfigGit struct {
+	Write userConfigGitWrite `yaml:"write"`
+}
 
-	if node.Kind == yaml.ScalarNode {
-		var value bool
-		if err := node.Decode(&value); err != nil {
-			return err
-		}
-		c.Value = value
-		return nil
-	}
+type userConfigGitWrite struct {
+	Allow      *bool                 `yaml:"allow"`
+	Operations userConfigGitWriteOps `yaml:"operations"`
+}
 
-	if node.Kind == yaml.MappingNode {
-		var value struct {
-			AddChange      *bool `yaml:"add-change"`
-			PushReleaseTag *bool `yaml:"push-release-tag"`
-		}
-		if err := node.Decode(&value); err != nil {
-			return err
-		}
-
-		c.Value = true
-		c.AddChange = value.AddChange
-		c.PushReleaseTag = value.PushReleaseTag
-		return nil
-	}
-
-	return fmt.Errorf("allow must be a boolean or object")
+type userConfigGitWriteOps struct {
+	AddChange        *bool `yaml:"add-change"`
+	CreateReleaseTag *bool `yaml:"create-release-tag"`
+	PushReleaseTag   *bool `yaml:"push-release-tag"`
 }
 
 // ResolveModuleForChangesDir returns module configuration for the target changes directory.
 // When .chagg.yaml is missing, a sensible single-module default is returned.
 func ResolveModuleForChangesDir(repoRoot string, changesDir string) (ModuleConfig, error) {
 	modules, hasConfig, configName, err := loadModules(repoRoot)
+	if err != nil {
+		return ModuleConfig{}, err
+	}
+
+	gitWritePolicy, err := loadUserGitWritePolicy()
 	if err != nil {
 		return ModuleConfig{}, err
 	}
@@ -157,6 +137,7 @@ func ResolveModuleForChangesDir(repoRoot string, changesDir string) (ModuleConfi
 
 	for _, module := range modules {
 		if samePath(module.ChangesDir, absChangesDir) {
+			module.GitWrite = gitWritePolicy
 			return module, nil
 		}
 	}
@@ -176,13 +157,20 @@ func ResolveModuleForChangesDir(repoRoot string, changesDir string) (ModuleConfi
 		return ModuleConfig{}, collisionErr
 	}
 
-	return defaultModuleForChangesDir(repoRoot, absChangesDir), nil
+	module := defaultModuleForChangesDir(repoRoot, absChangesDir)
+	module.GitWrite = gitWritePolicy
+	return module, nil
 }
 
 // ResolveModulesForChangesDirs maps every discovered changes directory to a module.
 // If .chagg.yaml exists, each directory must be explicitly configured.
 func ResolveModulesForChangesDirs(repoRoot string, changesDirs []string) (map[string]ModuleConfig, error) {
 	modules, hasConfig, configName, err := loadModules(repoRoot)
+	if err != nil {
+		return nil, err
+	}
+
+	gitWritePolicy, err := loadUserGitWritePolicy()
 	if err != nil {
 		return nil, err
 	}
@@ -197,6 +185,7 @@ func ResolveModulesForChangesDirs(repoRoot string, changesDirs []string) (map[st
 		matched := false
 		for _, module := range modules {
 			if samePath(module.ChangesDir, absChangesDir) {
+				module.GitWrite = gitWritePolicy
 				result[changesDir] = module
 				matched = true
 				break
@@ -211,7 +200,9 @@ func ResolveModulesForChangesDirs(repoRoot string, changesDirs []string) (map[st
 			return nil, NewValidationError("config", fmt.Sprintf("changes directory %s is not declared in %s", absChangesDir, configName))
 		}
 
-		result[changesDir] = defaultModuleForChangesDir(repoRoot, absChangesDir)
+		module := defaultModuleForChangesDir(repoRoot, absChangesDir)
+		module.GitWrite = gitWritePolicy
+		result[changesDir] = module
 	}
 
 	if !hasConfig {
@@ -242,7 +233,6 @@ func loadModules(repoRoot string) ([]ModuleConfig, bool, string, error) {
 		return nil, true, filepath.Base(configPath), NewValidationError("config", fmt.Sprintf("invalid %s: %s", filepath.Base(configPath), err))
 	}
 
-	globalGitWrite := applyGitWriteConfig(defaultGitWritePolicy(), file.GitWrite)
 	defaultAudience := normalizeAudience([]string(file.DefaultAudience))
 
 	modules := make([]ModuleConfig, 0, len(file.Modules))
@@ -283,7 +273,6 @@ func loadModules(repoRoot string) ([]ModuleConfig, bool, string, error) {
 			ChangesDir:      changesDirPath,
 			TagPrefix:       tagPrefix,
 			DefaultAudience: defaultAudience,
-			GitWrite:        globalGitWrite,
 		})
 		seenNames[strings.ToLower(name)] = true
 		seenDirs[strings.ToLower(changesDirPath)] = true
@@ -319,27 +308,80 @@ func resolveConfigPath(repoRoot string) (string, bool, error) {
 	return found[0], true, nil
 }
 
-func applyGitWriteConfig(base GitWritePolicy, overrides GitWriteConfig) GitWritePolicy {
+func loadUserGitWritePolicy() (GitWritePolicy, error) {
+	policy := defaultGitWritePolicy()
+
+	path, hasConfig, err := resolveUserConfigPath()
+	if err != nil {
+		return GitWritePolicy{}, err
+	}
+	if !hasConfig {
+		return policy, nil
+	}
+
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return GitWritePolicy{}, err
+	}
+
+	var cfg userConfigFile
+	if err := yaml.Unmarshal(content, &cfg); err != nil {
+		return GitWritePolicy{}, NewValidationError("config", fmt.Sprintf("invalid user config %s: %s", path, err))
+	}
+
+	return applyUserGitWriteConfig(policy, cfg.Git.Write), nil
+}
+
+func resolveUserConfigPath() (string, bool, error) {
+	if explicit := strings.TrimSpace(os.Getenv(UserConfigEnvVar)); explicit != "" {
+		if _, err := os.Stat(explicit); err == nil {
+			return explicit, true, nil
+		} else if errors.Is(err, os.ErrNotExist) {
+			return explicit, false, nil
+		} else {
+			return "", false, err
+		}
+	}
+
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", false, err
+	}
+
+	var path string
+	if runtime.GOOS == "windows" {
+		path = filepath.Join(homeDir, "AppData", "Roaming", "chagg", "config.yaml")
+	} else {
+		path = filepath.Join(homeDir, ".config", "chagg", "config.yaml")
+	}
+
+	if _, err := os.Stat(path); err == nil {
+		return path, true, nil
+	} else if errors.Is(err, os.ErrNotExist) {
+		return path, false, nil
+	} else {
+		return "", false, err
+	}
+}
+
+func applyUserGitWriteConfig(base GitWritePolicy, cfg userConfigGitWrite) GitWritePolicy {
 	result := base
-	if !overrides.Allow.IsSet {
-		return result
+
+	if cfg.Allow != nil {
+		result.Enabled = *cfg.Allow
+		result.Add = *cfg.Allow
+		result.ReleaseTag = *cfg.Allow
+		result.ReleasePush = *cfg.Allow
 	}
 
-	if overrides.Allow.AddChange == nil && overrides.Allow.PushReleaseTag == nil {
-		result.Enabled = overrides.Allow.Value
-		result.Add = overrides.Allow.Value
-		result.ReleaseTag = overrides.Allow.Value
-		result.ReleasePush = overrides.Allow.Value
-		return result
+	if cfg.Operations.AddChange != nil {
+		result.Add = *cfg.Operations.AddChange
 	}
-
-	result.Enabled = true
-	result.ReleaseTag = true
-	if overrides.Allow.AddChange != nil {
-		result.Add = *overrides.Allow.AddChange
+	if cfg.Operations.CreateReleaseTag != nil {
+		result.ReleaseTag = *cfg.Operations.CreateReleaseTag
 	}
-	if overrides.Allow.PushReleaseTag != nil {
-		result.ReleasePush = *overrides.Allow.PushReleaseTag
+	if cfg.Operations.PushReleaseTag != nil {
+		result.ReleasePush = *cfg.Operations.PushReleaseTag
 	}
 
 	return result
