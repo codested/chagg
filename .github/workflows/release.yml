@@ -1,0 +1,77 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Create release
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history is required so chagg can assign entries to the
+          # correct tag via git log.
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Run tests
+        run: go test ./...
+
+      # Build the tool itself first so we can use it to generate the notes.
+      - name: Build chagg
+        run: go build -o ./chagg-bin ./cmd/chagg
+
+      # Generate the changelog section for this specific release.
+      # -n 1 --no-show-staging shows exactly the most recently tagged release.
+      # tail -n +3 strips the "# Changelog" header line and the blank line
+      # that follows it, leaving a clean version section for the release body.
+      - name: Generate release notes
+        run: ./chagg-bin generate -n 1 --no-show-staging | tail -n +3 > release-notes.md
+
+      # Cross-compile stripped binaries for all major platforms.
+      - name: Build release binaries
+        run: |
+          mkdir -p dist
+          LDFLAGS="-s -w"
+          GOOS=linux   GOARCH=amd64 go build -ldflags="$LDFLAGS" -o dist/chagg-linux-amd64       ./cmd/chagg
+          GOOS=linux   GOARCH=arm64 go build -ldflags="$LDFLAGS" -o dist/chagg-linux-arm64       ./cmd/chagg
+          GOOS=darwin  GOARCH=amd64 go build -ldflags="$LDFLAGS" -o dist/chagg-darwin-amd64      ./cmd/chagg
+          GOOS=darwin  GOARCH=arm64 go build -ldflags="$LDFLAGS" -o dist/chagg-darwin-arm64      ./cmd/chagg
+          GOOS=windows GOARCH=amd64 go build -ldflags="$LDFLAGS" -o dist/chagg-windows-amd64.exe ./cmd/chagg
+          GOOS=windows GOARCH=arm64 go build -ldflags="$LDFLAGS" -o dist/chagg-windows-arm64.exe ./cmd/chagg
+
+      - name: Generate checksums
+        run: |
+          cd dist
+          sha256sum * > checksums.txt
+
+      # Tags with a pre-release segment (e.g. v1.0.0-beta.1) become
+      # GitHub pre-releases; plain vX.Y.Z tags become full releases.
+      - name: Determine release type
+        id: release_type
+        run: |
+          if [[ "${{ github.ref_name }}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "prerelease=" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=--prerelease" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            --title "${{ github.ref_name }}" \
+            --notes-file release-notes.md \
+            ${{ steps.release_type.outputs.prerelease }} \
+            dist/*
