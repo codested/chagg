@@ -168,14 +168,31 @@ Version assignment rules:
 
 Generates a changelog grouped by version and change type.
 
-- Default: staging changes + the most recent tagged release.
-- `--all`: all versions.
-- `--only-latest`: only the most recent tagged release, without staging changes.
-- `--since <version>`: staging + that version and all newer versions.
+- Default: staging changes + the most recent tagged release (`-n 1 --show-staged`).
+- `-n <count>`: number of tagged releases to include, newest first (default `1`, `0` = all).
+- `--no-show-staged`: omit unreleased (staging) changes.
+- `--since <version>`: include that version and all newer, plus staging.
 - `--format <markdown|json>`: output format (default `markdown`).
 - Filters: `--audience`, `--component`, `--type`.
-- In multi-module mode, output is generated for the module associated with the current `.changes` directory.
-- If invalid change files are present, `generate` fails and asks you to run `chagg check`.
+
+Examples:
+
+```bash
+# default: staging + latest release
+chagg generate
+
+# all releases + staging
+chagg generate -n 0
+
+# latest release only, no staging
+chagg generate --no-show-staged
+
+# last 3 releases + staging
+chagg generate -n 3
+
+# all releases, no staging
+chagg generate -n 0 --no-show-staged
+```
 
 ### `chagg release`
 

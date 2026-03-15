@@ -17,8 +17,10 @@ func GenerateCommand() *cli.Command {
 		Aliases: []string{"gen", "g"},
 		Usage:   "Generate a changelog from all change entries",
 		Description: "Produces a full changelog grouped by version and change type. " +
-			"Default shows staging changes and the most recent tagged release. " +
-			"Use --all or --since to expand the version range, --only-latest to strip staging, " +
+			"By default shows staging changes and the most recent tagged release (-n 1 --show-staged). " +
+			"Use -n to control how many tagged releases to include (0 = all), " +
+			"--no-show-staged to omit unreleased changes, " +
+			"--since to set a version boundary, " +
 			"and --audience / --component / --type to filter entries.",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
@@ -26,13 +28,15 @@ func GenerateCommand() *cli.Command {
 				Usage: "Output format: markdown, json",
 				Value: "markdown",
 			},
-			&cli.BoolFlag{
-				Name:  "all",
-				Usage: "Include all versions (default shows staging + most recent release only)",
+			&cli.IntFlag{
+				Name:  "n",
+				Usage: "Number of tagged releases to include, newest first (0 = all)",
+				Value: 1,
 			},
 			&cli.BoolFlag{
-				Name:  "only-latest",
-				Usage: "Include only the most recent tagged release, without staging changes",
+				Name:  "show-staged",
+				Usage: "Include unreleased (staging) changes",
+				Value: true,
 			},
 			&cli.StringFlag{
 				Name:  "since",
@@ -88,8 +92,8 @@ func generateAction(_ context.Context, cmd *cli.Command) error {
 	}
 
 	cl = changelog.ApplyVersionFilter(cl, changelog.VersionFilterOptions{
-		All:        cmd.Bool("all"),
-		OnlyLatest: cmd.Bool("only-latest"),
+		N:          cmd.Int("n"),
+		ShowStaged: cmd.Bool("show-staged"),
 		Since:      cmd.String("since"),
 	})
 

@@ -78,52 +78,45 @@ func VersionOnly(cl *ChangeLog, version string) *ChangeLog {
 
 // VersionFilterOptions controls which version groups are retained after loading.
 //
-// The options are evaluated in this order of precedence:
-//  1. All: return everything as-is.
-//  2. OnlyLatest: return only the most recent tagged version (no staging).
-//  3. Since: return staging plus every version >= Since.
-//  4. Default (nothing set): return staging + the single most recent tagged version.
+// Evaluation order:
+//  1. Since: keep staging (when ShowStaged) + every version >= Since.
+//  2. N + ShowStaged: keep up to N tagged versions newest-first, plus staging when ShowStaged.
+//     N = 0 means unlimited.
 type VersionFilterOptions struct {
-	All        bool
-	OnlyLatest bool
-	Since      string
+	N          int    // max tagged releases to include (0 = all)
+	ShowStaged bool   // include staging group
+	Since      string // lower version boundary (inclusive)
 }
 
 // ApplyVersionFilter restricts the changelog according to opts.
 func ApplyVersionFilter(cl *ChangeLog, opts VersionFilterOptions) *ChangeLog {
-	if opts.All {
-		return cl
-	}
-
-	if opts.OnlyLatest {
-		for _, g := range cl.Groups {
-			if !g.IsStaging() {
-				return &ChangeLog{Module: cl.Module, Groups: []VersionGroup{g}}
-			}
-		}
-		return &ChangeLog{Module: cl.Module}
-	}
-
 	if opts.Since != "" {
 		var filtered []VersionGroup
 		for _, g := range cl.Groups {
+			if g.IsStaging() {
+				if opts.ShowStaged {
+					filtered = append(filtered, g)
+				}
+				continue
+			}
 			filtered = append(filtered, g)
-			if !g.IsStaging() && versionMatches(g.Version, opts.Since) {
+			if versionMatches(g.Version, opts.Since) {
 				break
 			}
 		}
 		return &ChangeLog{Module: cl.Module, Groups: filtered}
 	}
 
-	// Default: staging + the single most recent tagged version.
 	var filtered []VersionGroup
 	tagCount := 0
 	for _, g := range cl.Groups {
 		if g.IsStaging() {
-			filtered = append(filtered, g)
+			if opts.ShowStaged {
+				filtered = append(filtered, g)
+			}
 			continue
 		}
-		if tagCount == 0 {
+		if opts.N == 0 || tagCount < opts.N {
 			filtered = append(filtered, g)
 			tagCount++
 		}
