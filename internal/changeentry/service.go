@@ -26,23 +26,23 @@ type Entry struct {
 // Defaults carries the resolved per-module defaults used when a field is not
 // explicitly set.
 type Params struct {
-	Type        string
-	TypeSet     bool
-	Bump        string
-	BumpSet     bool
-	Component   string
+	Type         string
+	TypeSet      bool
+	Bump         string
+	BumpSet      bool
+	Component    string
 	ComponentSet bool
-	Audience    string
-	AudienceSet bool
-	Rank        int
-	RankSet     bool
-	Issue       string
-	IssueSet    bool
-	Release     string
-	ReleaseSet  bool
-	Body        string
-	BodySet     bool
-	Defaults    Defaults
+	Audience     string
+	AudienceSet  bool
+	Rank         int
+	RankSet      bool
+	Issue        string
+	IssueSet     bool
+	Release      string
+	ReleaseSet   bool
+	Body         string
+	BodySet      bool
+	Defaults     Defaults
 }
 
 // CreateChange creates a new change entry file under module.ChangesDir.

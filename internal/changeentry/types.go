@@ -23,7 +23,7 @@ const (
 // the default SemVer bump level, and the display order (lower = earlier).
 type TypeDefinition struct {
 	ID          ChangeType
-	Aliases     []string  // lower-cased; does NOT include the ID itself
+	Aliases     []string // lower-cased; does NOT include the ID itself
 	Title       string
 	DefaultBump BumpLevel
 	Order       int
