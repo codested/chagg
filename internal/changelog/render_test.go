@@ -181,7 +181,7 @@ func TestTruncateLogPreviewAddsEllipsisWhenPreviewTooLong(t *testing.T) {
 
 func TestRenderJSONProducesStructuredOutput(t *testing.T) {
 	changeLog := &ChangeLog{
-		Module: changeentry.ModuleConfig{Name: "default"},
+		Module: changeentry.ModuleConfig{Name: "default", ChangesDir: "/repo/.changes"},
 		Groups: []VersionGroup{{
 			Version: "staging",
 			TypeGroups: []TypeGroup{{
@@ -189,7 +189,7 @@ func TestRenderJSONProducesStructuredOutput(t *testing.T) {
 				Title:      "Bug Fixes",
 				Entries: []EntryWithMeta{{
 					Entry:            changeentry.Entry{Type: changeentry.ChangeTypeFix, Body: "Fix bug."},
-					Path:             ".changes/fix__bug.md",
+					Path:             "/repo/.changes/feature/fix__bug.md",
 					OriginalFilename: "fix__bug.md",
 					AddedCommitHash:  "abc123def",
 				}},
@@ -198,7 +198,7 @@ func TestRenderJSONProducesStructuredOutput(t *testing.T) {
 	}
 
 	buffer := bytes.NewBuffer(nil)
-	if err := RenderJSON(changeLog, buffer); err != nil {
+	if err := RenderJSON(changeLog, "/repo", buffer); err != nil {
 		t.Fatalf("RenderJSON returned error: %v", err)
 	}
 
@@ -235,7 +235,49 @@ func TestRenderJSONProducesStructuredOutput(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected first entry object")
 	}
-	if firstEntry["id"] != "fix__bug.md@abc123def" {
-		t.Fatalf("expected entry id fix__bug.md@abc123def, got %#v", firstEntry["id"])
+	if firstEntry["id"] != "feature/fix__bug.md@abc123def" {
+		t.Fatalf("expected entry id feature/fix__bug.md@abc123def, got %#v", firstEntry["id"])
+	}
+	if firstEntry["path"] != ".changes/feature/fix__bug.md" {
+		t.Fatalf("expected repo-relative path .changes/feature/fix__bug.md, got %#v", firstEntry["path"])
+	}
+}
+
+func TestRenderJSONIncludesRelativeChangesPathInID(t *testing.T) {
+	changeLog := &ChangeLog{
+		Module: changeentry.ModuleConfig{Name: "msal-react", ChangesDir: "/repo/lib/msal-react/.changes"},
+		Groups: []VersionGroup{{
+			Version: "staging",
+			TypeGroups: []TypeGroup{{
+				ChangeType: changeentry.ChangeTypeFeature,
+				Title:      "Features",
+				Entries: []EntryWithMeta{{
+					Entry:           changeentry.Entry{Type: changeentry.ChangeTypeFeature, Body: "Add thing."},
+					Path:            "/repo/lib/msal-react/.changes/ui/feature__add-thing.md",
+					AddedCommitHash: "deadbeef",
+				}},
+			}},
+		}},
+	}
+
+	buffer := bytes.NewBuffer(nil)
+	if err := RenderJSON(changeLog, "/repo", buffer); err != nil {
+		t.Fatalf("RenderJSON returned error: %v", err)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(buffer.Bytes(), &payload); err != nil {
+		t.Fatalf("failed to unmarshal output: %v", err)
+	}
+
+	groups := payload["groups"].([]any)
+	firstGroup := groups[0].(map[string]any)
+	types := firstGroup["types"].([]any)
+	firstType := types[0].(map[string]any)
+	entries := firstType["entries"].([]any)
+	firstEntry := entries[0].(map[string]any)
+
+	if firstEntry["id"] != "msal-react/ui/feature__add-thing.md@deadbeef" {
+		t.Fatalf("expected id msal-react/ui/feature__add-thing.md@deadbeef, got %#v", firstEntry["id"])
 	}
 }

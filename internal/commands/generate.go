@@ -102,7 +102,7 @@ func generateAction(_ context.Context, cmd *cli.Command) error {
 	case "markdown":
 		return changelog.RenderMarkdown(cl, os.Stdout)
 	case "json":
-		return changelog.RenderJSON(cl, os.Stdout)
+		return changelog.RenderJSON(cl, repoRoot, os.Stdout)
 	default:
 		return changeentry.NewValidationError("format", fmt.Sprintf("unsupported format %q (use markdown or json)", cmd.String("format")))
 	}

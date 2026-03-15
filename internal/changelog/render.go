@@ -117,7 +117,7 @@ func RenderMarkdown(cl *ChangeLog, w io.Writer) error {
 	return err
 }
 
-func RenderJSON(cl *ChangeLog, w io.Writer) error {
+func RenderJSON(cl *ChangeLog, repoRoot string, w io.Writer) error {
 	type jsonEntry struct {
 		ID        string   `json:"id"`
 		Path      string   `json:"path"`
@@ -161,9 +161,11 @@ func RenderJSON(cl *ChangeLog, w io.Writer) error {
 		for _, tg := range group.TypeGroups {
 			entries := make([]jsonEntry, 0, len(tg.Entries))
 			for _, entry := range tg.Entries {
+				idPath := jsonIDPath(cl.Module, entry.Path)
+				id := idPath + "@" + jsonEntryAddHash(entry)
 				entries = append(entries, jsonEntry{
-					ID:        entry.ID(),
-					Path:      entry.Path,
+					ID:        id,
+					Path:      displayPath(repoRoot, entry.Path),
 					Type:      string(entry.Entry.Type),
 					Breaking:  entry.Entry.Breaking,
 					Component: entry.Entry.Component,
@@ -196,6 +198,33 @@ func RenderJSON(cl *ChangeLog, w io.Writer) error {
 	encoder := json.NewEncoder(w)
 	encoder.SetIndent("", "  ")
 	return encoder.Encode(doc)
+}
+
+func jsonIDPath(module changeentry.ModuleConfig, entryPath string) string {
+	rel, err := filepath.Rel(module.ChangesDir, entryPath)
+	if err != nil {
+		rel = filepath.Base(entryPath)
+	}
+
+	rel = filepath.Clean(rel)
+	if rel == "." || strings.HasPrefix(rel, "..") {
+		rel = filepath.Base(entryPath)
+	}
+
+	if module.Name != "" && !strings.EqualFold(module.Name, "default") {
+		return filepath.ToSlash(filepath.Join(module.Name, rel))
+	}
+
+	return filepath.ToSlash(rel)
+}
+
+func jsonEntryAddHash(entry EntryWithMeta) string {
+	hash := strings.TrimSpace(entry.AddedCommitHash)
+	if hash == "" {
+		return "untracked"
+	}
+
+	return hash
 }
 
 func pluralise(n int, singular, plural string) string {
