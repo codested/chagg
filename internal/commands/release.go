@@ -65,12 +65,6 @@ func releaseAction(_ context.Context, cmd *cli.Command) error {
 		return err
 	}
 
-	if mode.requiresGitWrites() {
-		if err := ensureCleanWorkingTree(repoRoot); err != nil {
-			return err
-		}
-	}
-
 	changesDir, err := changeentry.ResolveChangesDirectory(cwd)
 	if err != nil {
 		return err
@@ -81,11 +75,24 @@ func releaseAction(_ context.Context, cmd *cli.Command) error {
 		return err
 	}
 
+	// Apply config-driven auto-push when --push was not explicitly given.
+	// push-release-tag = true in any config layer triggers an automatic push
+	// after the tag is created, without requiring the --push flag.
+	applyConfigPushOverride(cmd, &mode, module.GitWrite)
+
 	if mode.willCreateTag && !module.GitWrite.AllowsReleaseTag() {
 		return changeentry.NewValidationError("config", "release tag creation is disabled by git-write policy")
 	}
-	if mode.pushTag && !module.GitWrite.AllowsReleasePush() {
-		return changeentry.NewValidationError("config", "release tag push is disabled by git-write policy")
+	// Push is gated only by the global kill-switch. push-release-tag controls
+	// automatic push behaviour, not whether --push is permitted.
+	if mode.pushTag && !module.GitWrite.Enabled {
+		return changeentry.NewValidationError("config", "git write operations are disabled by git-write policy")
+	}
+
+	if mode.requiresGitWrites() {
+		if err := ensureCleanWorkingTree(repoRoot); err != nil {
+			return err
+		}
 	}
 
 	cl, err := changelog.LoadChangeLog(repoRoot, module, changelog.FilterOptions{})
@@ -156,8 +163,8 @@ func releaseAction(_ context.Context, cmd *cli.Command) error {
 	entryCount := staging.Groups[0].TotalEntries()
 	if mode.dryRun {
 		fmt.Printf("Dry-run: would create local tag %s for module %q from %d staging %s.\n", tagName, module.Name, entryCount, pluralize(entryCount, "entry", "entries"))
-		if mode.pushTag {
-			fmt.Printf("Dry-run: would push tag with: git push origin %s\n", tagName)
+		if module.GitWrite.ReleasePush {
+			fmt.Printf("Dry-run: would push tag with: git push origin %s (auto-push from config)\n", tagName)
 		}
 		return nil
 	}
@@ -211,6 +218,16 @@ func resolveReleaseMode(cmd *cli.Command) (releaseMode, error) {
 
 	mode.willCreateTag = !mode.dryRun && !mode.versionOnly
 	return mode, nil
+}
+
+// applyConfigPushOverride sets mode.pushTag when the git-write policy has
+// ReleasePush enabled and the user did not explicitly pass --push. It is a
+// no-op in dry-run and version-only modes (where willCreateTag is already
+// false) and when the caller has already set --push explicitly.
+func applyConfigPushOverride(cmd *cli.Command, mode *releaseMode, policy changeentry.GitWritePolicy) {
+	if !cmd.IsSet("push") && mode.willCreateTag && policy.ReleasePush {
+		mode.pushTag = true
+	}
 }
 
 func (m releaseMode) requiresGitWrites() bool {

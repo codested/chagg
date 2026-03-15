@@ -8,7 +8,7 @@ validates them, shows release previews, generates Markdown changelogs, and creat
 ## Quick start
 
 ```bash
-# initialize the repository (creates .changes/ and optional .chagg.yaml)
+# one-time setup (creates .changes/ and optional .chagg.yaml)
 chagg init
 
 # create a change entry interactively
@@ -29,16 +29,15 @@ chagg release
 
 ## How `.changes` is resolved
 
-For commands that operate on a single working changes directory (for example `add`, `log`, `generate`, `release`):
+For commands that operate on a single working changes directory (`add`, `log`, `generate`, `release`):
 
 1. Start at the current working directory.
 2. Walk upward until an existing `.changes` directory is found.
 3. If none exists, keep walking to `.git` (or filesystem root) and use `.changes` there.
 
-`add` requires the `.changes` directory to already exist. Run `chagg init` if it has not been created yet.
+`add` requires the `.changes` directory to already exist — run `chagg init` first.
 
-For `check`, `chagg` finds the Git root and validates **all** `.changes` directories below it (useful for multi-module
-repositories).
+For `check`, `chagg` finds the Git root and validates **all** `.changes` directories below it (useful for multi-module repositories).
 
 ## Configuration
 
@@ -51,7 +50,8 @@ repositories).
 
 All layers share the same schema for `defaults`, `types`, and `git.write`. The `modules` list is only meaningful in the repo config.
 
-### Defaults
+<details>
+<summary><strong>Defaults</strong></summary>
 
 The `defaults` section sets fallback values for entry fields. A module inherits defaults from every layer above it, with lower layers taking precedence.
 
@@ -66,7 +66,10 @@ defaults:
 - `component`: applied to new entries that omit `component:`. Can be a single string or a list.
 - `rank`: default rank for new entries (default `0`).
 
-### Custom change types
+</details>
+
+<details>
+<summary><strong>Custom change types</strong></summary>
 
 The `types` list lets you add new types or override fields of built-in ones. Types are merged across layers: a higher-priority layer can override any field or append entirely new types.
 
@@ -96,15 +99,18 @@ Duplicate IDs within a layer, or aliases that conflict with another type's ID or
 
 Built-in types and their defaults:
 
-| ID         | Aliases              | Bump  | Order |
-|------------|----------------------|-------|-------|
+| ID         | Aliases               | Bump  | Order |
+|------------|-----------------------|-------|-------|
 | `feature`  | `feat`, `enhancement` | minor | 0     |
-| `fix`      | `bugfix`, `patch`    | patch | 1     |
-| `removal`  | `remove`             | minor | 2     |
-| `security` | —                    | patch | 3     |
-| `docs`     | `doc`                | patch | 4     |
+| `fix`      | `bugfix`, `patch`     | patch | 1     |
+| `removal`  | `remove`              | minor | 2     |
+| `security` | —                     | patch | 3     |
+| `docs`     | `doc`                 | patch | 4     |
 
-### Git write policy
+</details>
+
+<details>
+<summary><strong>Git write policy</strong></summary>
 
 Controls which write operations `chagg` may perform. Configurable at user or repo level; repo settings override user settings.
 
@@ -115,13 +121,17 @@ git:
     operations:
       add-change: true         # stage new change files after `chagg add`
       create-release-tag: true # create local git tags
-      push-release-tag: false  # push tags to origin automatically
+      push-release-tag: false  # push tags to origin automatically after `chagg release`
 ```
 
 - `git.write.allow`: when `false`, overrides all individual operation flags to disabled.
-- Omit the section entirely to inherit the layer above (built-in default: all allowed).
+- `push-release-tag`: when `true`, `chagg release` pushes the created tag automatically without needing `--push`. Defaults to `false` (local tag only).
+- Omit the section entirely to inherit the layer above (built-in default: all operations enabled except `push-release-tag`).
 
-### Multi-module configuration
+</details>
+
+<details>
+<summary><strong>Multi-module configuration</strong></summary>
 
 For monorepos, declare modules in the repo config to set names, tag prefixes, and module-level defaults/types.
 
@@ -150,7 +160,10 @@ Rules:
 - For a repo-root `.changes`, the inferred `tag-prefix` is empty.
 - If two `.changes` directories infer the same module name, commands fail until you add explicit `modules` entries with unique names.
 
-### Full example config
+</details>
+
+<details>
+<summary><strong>Full example config</strong></summary>
 
 ```yaml
 # .chagg.yaml (repo config)
@@ -163,7 +176,7 @@ defaults:
 git:
   write:
     operations:
-      push-release-tag: false
+      push-release-tag: true   # push tags automatically
 
 types:
   - id: breaking
@@ -183,24 +196,17 @@ modules:
         default-bump: major
 ```
 
+</details>
+
 ## Change entry format
 
 Change type is encoded in the filename prefix, not in front matter.
 
-Filename schema (case-insensitive):
+Filename schema (case-insensitive): `<type>__<title>.md` (preferred) or `<type>_<title>.md`
 
-- `<type>__<title>.md` (preferred)
-- `<type>_<title>.md` (also accepted)
+Examples: `feature__oauth-login.md`, `fix__token-expiry.md`, `docs__release-notes.md`
 
-Examples:
-
-- `feature__oauth-login.md`
-- `FEAT__quick-fix.md`
-- `Feat_small-update.md`
-
-The available type prefixes include the built-in types (`feature`, `fix`, `removal`, `security`, `docs`) plus any custom types defined in config.
-
-Front matter is optional and only needed for overrides.
+Front matter is optional and only needed for overrides:
 
 ```markdown
 ---
@@ -217,10 +223,10 @@ release: v2.1.0
 Add OAuth login support.
 ```
 
-### Fields
+<details>
+<summary><strong>Front-matter field reference</strong></summary>
 
-- `bump` (optional): override the default version bump level for this entry (`major`, `minor`, or `patch`). When
-  omitted, the bump level is derived from the change type's `default-bump`.
+- `bump` (optional): override the default version bump level for this entry (`major`, `minor`, or `patch`). When omitted, the bump level is derived from the change type's `default-bump`.
 - `component` (optional, string or list)
 - `audience` (optional, string or list; defaults to `defaults.audience` when configured)
 - `rank` (optional, default `0`; higher numbers are shown first within a type group)
@@ -233,6 +239,8 @@ Notes:
 - Default values (omitted `bump`, empty audience, `rank: 0`) are omitted when new files are rendered.
 - The body is free Markdown. `log` uses the first non-empty line as preview text.
 
+</details>
+
 ## Commands
 
 ### `chagg init`
@@ -240,45 +248,27 @@ Notes:
 Bootstraps a repository for use with `chagg`.
 
 - Detects the Git root and fails if the current directory is not inside a Git repository.
-- If run from a **sub-directory** of the repo, prompts whether to create a module for that directory or initialize at the repo root instead.
+- If run from a **sub-directory**, prompts whether to create a module for that directory or initialize at the repo root.
 - If run from the **repo root**, asks whether this is a multi-module project (default: no).
   - **Single module**: creates `.changes/` at the repo root. No config file is needed.
-  - **Multi-module**: prompts for one or more modules (name, changes directory, tag prefix), then creates each `.changes/` directory and writes a `.chagg.yaml` with the `modules:` list.
-- Before entering multi-module setup, warns if existing bare SemVer tags (without a module prefix) are found, as they may conflict with future module-scoped releases.
-- Prints a summary of optional settings to configure afterward.
-- `--no-prompt`: non-interactive mode; uses all defaults (always single module, infers module name from directory).
-
-```bash
-# interactive setup at repo root
-chagg init
-
-# non-interactive (CI / scripted setup)
-chagg init --no-prompt
-```
+  - **Multi-module**: prompts for modules (name, changes directory, tag prefix), creates `.changes/` directories, and writes `.chagg.yaml`.
+- Warns if bare SemVer tags exist before setting up multi-module mode.
+- `--no-prompt`: non-interactive mode; uses all defaults.
 
 ### `chagg add <path>`
 
-Creates a new entry file below `.changes`.
+Creates a new entry file below `.changes`. Requires the `.changes` directory to exist (run `chagg init` first).
 
-- `chagg add auth/token-expiry --type fix` -> `.changes/auth/fix__token-expiry.md`
-- Missing directories are created automatically.
-- Supports flags for all entry properties (`--type`, `--bump`, `--component`, `--audience`, `--rank`, `--issue`,
-  `--release`, `--body`).
-- `--rank` controls ordering in changelog output (higher values first).
-- By default, new files are staged automatically (`git add`) after creation (built-in default).
-- Use `--no-git-add` to skip staging, or `--git-add` to force staging explicitly.
-- If the target filename already starts with a type prefix (for example `feat__login`), `--type` is optional.
-- If no filename prefix is present, `--type` (or interactive prompt) is used to add the prefix automatically.
-- If stdin is piped, prompts are skipped (no blocking).
+- `chagg add auth/token-expiry --type fix` → `.changes/auth/fix__token-expiry.md`
+- Supports flags for all entry properties: `--type`, `--bump`, `--component`, `--audience`, `--rank`, `--issue`, `--release`, `--body`.
+- New files are staged with `git add` automatically (use `--no-git-add` to skip).
+- If the filename already starts with a type prefix, `--type` is optional.
 - `--no-prompt` forces non-interactive mode (recommended for CI and AI tooling).
 
-AI/automation example:
-
 ```bash
-chagg add prototype/ai-generated-note \
-  --type docs \
-  --body "Generated by an AI assistant from merged PR summaries." \
-  --no-prompt
+# AI/automation example
+chagg add prototype/ai-note --type docs \
+  --body "Generated from PR summaries." --no-prompt
 ```
 
 ### `chagg check`
@@ -286,22 +276,19 @@ chagg add prototype/ai-generated-note \
 Validates all change entry files in all discovered `.changes` directories.
 
 - Verifies filename type prefix schema and supported front-matter values.
-- Prints deterministic, module-grouped per-file validation results using repository-relative paths.
-- Prints a valid/invalid summary.
+- Prints deterministic, module-grouped per-file results using repository-relative paths.
 - Returns non-zero exit code when invalid entries are found.
 
 ### `chagg log [version]`
 
 Shows a human-friendly release preview.
 
-- No argument: shows `staging` (changes since last SemVer tag).
-- With `version` (for example `v1.4.0`): shows changes assigned to that release.
+- No argument: shows `staging` (changes since last SemVer tag) with version hints.
+- With `version`: shows changes assigned to that specific release.
 - Filters: `--audience`, `--component`, `--type`.
-- `--preview-length <n>` controls preview truncation length (default: `80`).
-- By default in staging view, `log` prints version hints (latest stable + next calculated tag).
-- Use `--no-version-hints` to hide those hints.
-- In multi-module mode, tags are scoped to the module's `tag-prefix`.
-- If invalid change files are present, `log` fails and asks you to run `chagg check`.
+- `--preview-length <n>` controls preview truncation (default: `80`).
+- `--no-version-hints` hides the latest stable / next tag hints.
+- Fails if invalid change files are present (run `chagg check` first).
 
 Version assignment rules:
 
@@ -314,35 +301,16 @@ Version assignment rules:
 Generates a changelog grouped by version and change type.
 
 - Default: staging changes + the most recent tagged release (`-n 1 --show-staging`).
-- `-n <count>`: number of tagged releases to include, newest first (default `1`, `0` = all).
-- `--only-staging`: include only unreleased (staging) changes.
-- `--no-show-staging`: omit unreleased (staging) changes.
-- `--since <version>`: include that version and all newer, plus staging.
+- `-n <count>`: number of tagged releases to include (default `1`, `0` = all).
+- `--only-staging` / `--no-show-staging`: include or exclude staging.
+- `--since <version>`: include that version and all newer.
 - `--format <markdown|json>`: output format (default `markdown`).
 - Filters: `--audience`, `--component`, `--type`.
 
-Constraints:
-
-- `--only-staging` cannot be combined with `--since`.
-- `--only-staging` cannot be combined with `-n`.
-- `--only-staging` cannot be combined with `--no-show-staging`.
-
-Examples:
-
 ```bash
-# default: staging + latest release
-chagg generate
-
-# all releases + staging
-chagg generate -n 0
-
-# staging only
+chagg generate           # staging + latest release
+chagg generate -n 0      # all releases + staging
 chagg generate --only-staging
-
-# last 3 releases + staging
-chagg generate -n 3
-
-# all releases, no staging
 chagg generate -n 0 --no-show-staging
 ```
 
@@ -350,46 +318,21 @@ chagg generate -n 0 --no-show-staging
 
 Creates the next release tag from current staging changes.
 
-- If no staging changes exist, nothing is tagged.
-- If tags already exist, next SemVer is computed from staging entries using per-entry bump levels:
-    - The effective bump level per entry is the `bump` override when set, otherwise the type's `default-bump`.
-    - The highest effective bump level across all staging entries is applied.
-    - `bump: major` on any entry triggers a major version bump.
+- Computes the next SemVer from staging entries: the highest effective bump level wins (`bump:` override, or the type's `default-bump`).
 - If no SemVer tag exists yet, prompts for the initial version (default `0.1.0`).
-- Tag is created **locally only**. `chagg` prints a copy-paste command to push it.
-- `--dry-run`: computes and prints what would happen, but does not create/push tags.
-- `--version-only`: prints only the computed version (for scripts/export).
-- `--push`: pushes the newly created tag to `origin` automatically.
-- In multi-module mode, created tags are prefixed with the module `tag-prefix`.
-- Release requires a clean Git working tree (no staged/unstaged/untracked changes).
-- Git write operations are gated by the `git.write` policy resolved from the config cascade.
-
-Suffix handling:
-
-- `--pre <label>` creates/increments pre-release tags for the next core version.
-    - Example: `v1.8.0-beta.1`, then `v1.8.0-beta.2`
-- `--build <meta>` appends SemVer build metadata.
-    - Example: `v1.8.0-beta.2+build.42`
-- Baseline bumping uses the latest **stable** tag for the module (pre-release tags do not become baseline
-  automatically).
-
-Examples:
+- Tag is created locally. Set `git.write.push-release-tag = true` in config or pass `--push` to push it.
+- Requires a clean Git working tree.
+- `--dry-run`: compute and print the next version without creating a tag.
+- `--version-only`: print only the computed version (for scripts).
+- `--push`: push the created tag to `origin`.
+- `--pre <label>`: create/increment pre-release tags (e.g. `v1.8.0-beta.1`).
+- `--build <meta>`: append SemVer build metadata.
 
 ```bash
-# create a pre-release for next version
-chagg release --pre beta
-
-# create a pre-release with build metadata
-chagg release --pre preprod --build build.20260314
-
-# compute release version only
-chagg release --version-only
-
-# dry-run release
-chagg release --dry-run
-
-# create and push tag automatically
-chagg release --push
+chagg release             # create local tag
+chagg release --push      # create and push tag
+chagg release --dry-run   # preview only
+chagg release --pre beta  # pre-release
 ```
 
 ### `chagg config`
@@ -397,149 +340,99 @@ chagg release --push
 Inspect and modify chagg settings, similar to `git config`.
 
 ```bash
-# show all resolved settings for the current module
-chagg config
-chagg config --list
-
-# read a specific setting (resolved across all layers)
-chagg config defaults.audience
-chagg config git.write.push-release-tag
-
-# set a value in the repo config (.chagg.yaml)
-chagg config defaults.audience public
-chagg config git.write.push-release-tag false
-
-# set a value in the user config (~/.config/chagg/config.yaml)
-chagg config --global defaults.audience public
-chagg config --global git.write.push-release-tag false
-
-# set a list value (space-separated or comma-separated)
-chagg config defaults.audience public internal
-chagg config defaults.audience "public,internal"
-
-# remove a key from the repo config
-chagg config --unset defaults.audience
-
-# remove a key from the user config
-chagg config --unset --global git.write.push-release-tag
-
-# list all available change types for the current module
-chagg config types
+chagg config              # show all resolved settings
+chagg config <key>        # read a value
+chagg config <key> <val>  # write to repo config
+chagg config --global <key> <val>  # write to user config
+chagg config --unset <key>
+chagg config types        # list available change types
 ```
 
 Supported keys:
 
-| Key                               | Type    | Description                              |
-|-----------------------------------|---------|------------------------------------------|
-| `defaults.audience`               | list    | Default audience for new entries         |
-| `defaults.rank`                   | integer | Default rank for new entries             |
-| `defaults.component`              | list    | Default component for new entries        |
-| `git.write.allow`                 | bool    | Global kill-switch for all git writes    |
-| `git.write.add-change`            | bool    | Stage new change files after `chagg add` |
-| `git.write.create-release-tag`    | bool    | Create local release tags                |
-| `git.write.push-release-tag`      | bool    | Push tags to origin automatically        |
-
-Scopes:
-
-- **Default (no flag)**: reads from or writes to the repo config (`.chagg.yaml`). All read operations always show the _resolved_ (effective) value after merging all layers.
-- **`--global`**: targets the user config (`~/.config/chagg/config.yaml` on macOS/Linux, `%AppData%\chagg\config.yaml` on Windows).
+| Key                            | Default | Description                                    |
+|--------------------------------|---------|------------------------------------------------|
+| `defaults.audience`            | —       | Default audience for new entries               |
+| `defaults.rank`                | `0`     | Default rank for new entries                   |
+| `defaults.component`           | —       | Default component for new entries              |
+| `git.write.allow`              | `true`  | Global kill-switch for all git writes          |
+| `git.write.add-change`         | `true`  | Stage new change files after `chagg add`       |
+| `git.write.create-release-tag` | `true`  | Create local release tags                      |
+| `git.write.push-release-tag`   | `false` | Push tags to origin automatically              |
 
 ## FAQ
 
-### How do I see what change types are available?
+<details>
+<summary>How do I push tags to origin automatically?</summary>
+
+Set `push-release-tag` to `true` — `chagg release` will then push without needing `--push`:
 
 ```bash
-chagg config types
+chagg config git.write.push-release-tag true        # this repo only
+chagg config --global git.write.push-release-tag true  # all repos
 ```
 
-Output:
-
-```
-  ID              ALIASES                  BUMP     ORDER   TITLE
-  ──────────────  ───────────────────────  ───────  ──────  ────────────────────
-  feature         feat, enhancement        minor    0       Features
-  fix             bugfix, patch            patch    1       Bug Fixes
-  removal         remove                   minor    2       Removals
-  security        —                        patch    3       Security
-  docs            doc                      patch    4       Documentation
-```
-
-### How do I check the default bump level for a type?
+To disable automatic pushing again:
 
 ```bash
-chagg config types
+chagg config git.write.push-release-tag false
 ```
 
-Look at the `BUMP` column. You can override any type's default bump in the config:
-
-```yaml
-# .chagg.yaml
-types:
-  - id: security
-    default-bump: minor
-```
-
-Or check the effective setting after all layers are merged:
-
-```bash
-# .chagg.yaml currently overrides security to minor
-chagg config types
-#  security        —                        minor    3       Security
-```
-
-### How do I set a default audience so I don't have to type it every time?
-
-For all repos on this machine:
-
-```bash
-chagg config --global defaults.audience public
-```
-
-For just this repo (overrides user default):
-
-```bash
-chagg config defaults.audience public
-```
-
-For multiple audiences:
-
-```bash
-chagg config defaults.audience public internal
-```
-
-### How do I prevent chagg from automatically staging files?
-
-Disable it globally (for all repos):
-
-```bash
-chagg config --global git.write.add-change false
-```
-
-Or per repo:
-
-```bash
-chagg config git.write.add-change false
-```
-
-Or just for a single `add` invocation:
-
-```bash
-chagg add auth/fix --no-git-add
-```
-
-### How do I prevent chagg from pushing tags automatically?
-
-```bash
-chagg config --global git.write.push-release-tag false
-```
-
-This means `chagg release --push` will be rejected. To disable all git writes entirely:
+To disable all git writes entirely:
 
 ```bash
 chagg config --global git.write.allow false
 ```
 
-### How do I see all resolved settings for the current module?
+</details>
+
+<details>
+<summary>How do I prevent chagg from automatically staging files after <code>add</code>?</summary>
+
+```bash
+chagg config --global git.write.add-change false  # all repos
+chagg config git.write.add-change false           # this repo only
+chagg add auth/fix --no-git-add                   # single invocation
+```
+
+</details>
+
+<details>
+<summary>How do I set a default audience?</summary>
+
+```bash
+chagg config --global defaults.audience public          # all repos
+chagg config defaults.audience public                   # this repo
+chagg config defaults.audience public internal          # multiple values
+```
+
+</details>
+
+<details>
+<summary>How do I add a custom change type?</summary>
+
+Edit `.chagg.yaml` directly (custom types cannot be set via `chagg config`):
+
+```yaml
+# .chagg.yaml
+types:
+  - id: breaking
+    aliases: [break, bc]
+    title: Breaking Changes
+    default-bump: major
+    order: 0
+```
+
+Verify it loaded:
+
+```bash
+chagg config types
+```
+
+</details>
+
+<details>
+<summary>How do I see all resolved settings?</summary>
 
 ```bash
 chagg config
@@ -567,28 +460,7 @@ Types (use 'chagg config types' for details):
   docs
 ```
 
-### How do I add a custom change type?
-
-Edit `.chagg.yaml` directly (custom types cannot be set via `chagg config` at the moment):
-
-```yaml
-# .chagg.yaml
-types:
-  - id: breaking
-    aliases: [break, bc]
-    title: Breaking Changes
-    default-bump: major
-    order: 0
-```
-
-Then verify it's loaded:
-
-```bash
-chagg config types
-#  breaking        break, bc                major    0       Breaking Changes
-#  feature         feat, enhancement        minor    1       Features
-#  ...
-```
+</details>
 
 ## Typical release flow
 
@@ -612,6 +484,6 @@ chagg generate > CHANGELOG.md
 # 5) create local tag
 chagg release
 
-# 6) push tag (command is printed by chagg)
+# 6) push tag (command is printed by chagg, or auto-pushed when configured)
 git push origin vX.Y.Z
 ```

@@ -45,7 +45,9 @@ type GitWritePolicy struct {
 }
 
 func defaultGitWritePolicy() GitWritePolicy {
-	return GitWritePolicy{Enabled: true, Add: true, ReleaseTag: true, ReleasePush: true}
+	// ReleasePush defaults to false: tags are created locally by default.
+	// Set git.write.push-release-tag = true in config to push automatically.
+	return GitWritePolicy{Enabled: true, Add: true, ReleaseTag: true, ReleasePush: false}
 }
 
 func (p GitWritePolicy) AllowsAdd() bool         { return p.Enabled && p.Add }

@@ -1,0 +1,1 @@
+git.write.push-release-tag = true in config now triggers automatic push after 'chagg release' without requiring the --push flag. Previously the config value was only a permission gate. The default is false (local tag only). Only the global git.write.allow = false now blocks the explicit --push flag.

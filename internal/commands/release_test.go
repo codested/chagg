@@ -175,3 +175,56 @@ func TestResolveReleaseModePush(t *testing.T) {
 		t.Fatalf("push mode should require git writes")
 	}
 }
+
+func TestConfigAutoPushSetsModePushTagWhenPolicyEnabled(t *testing.T) {
+	cmd := ReleaseCommand()
+	mode := releaseMode{willCreateTag: true}
+	policy := changeentry.GitWritePolicy{Enabled: true, ReleasePush: true}
+
+	applyConfigPushOverride(cmd, &mode, policy)
+
+	if !mode.pushTag {
+		t.Fatal("expected auto-push to be enabled from config")
+	}
+}
+
+func TestConfigAutoPushDoesNotOverrideExplicitFlagFalse(t *testing.T) {
+	cmd := ReleaseCommand()
+	// Simulate --push=false explicitly set by user.
+	if err := cmd.Set("push", "false"); err != nil {
+		t.Fatalf("set push: %v", err)
+	}
+	mode := releaseMode{willCreateTag: true}
+	policy := changeentry.GitWritePolicy{Enabled: true, ReleasePush: true}
+
+	applyConfigPushOverride(cmd, &mode, policy)
+
+	if mode.pushTag {
+		t.Fatal("expected explicit --push=false to prevent auto-push")
+	}
+}
+
+func TestConfigAutoPushDoesNothingWhenPolicyDisabled(t *testing.T) {
+	cmd := ReleaseCommand()
+	mode := releaseMode{willCreateTag: true}
+	policy := changeentry.GitWritePolicy{Enabled: true, ReleasePush: false}
+
+	applyConfigPushOverride(cmd, &mode, policy)
+
+	if mode.pushTag {
+		t.Fatal("expected no auto-push when ReleasePush is false")
+	}
+}
+
+func TestConfigAutoPushDoesNothingInDryRun(t *testing.T) {
+	cmd := ReleaseCommand()
+	// willCreateTag is false in dry-run, so auto-push should not fire.
+	mode := releaseMode{dryRun: true, willCreateTag: false}
+	policy := changeentry.GitWritePolicy{Enabled: true, ReleasePush: true}
+
+	applyConfigPushOverride(cmd, &mode, policy)
+
+	if mode.pushTag {
+		t.Fatal("expected no auto-push in dry-run mode")
+	}
+}
