@@ -125,7 +125,7 @@ func RenderJSON(cl *ChangeLog, repoRoot string, w io.Writer) error {
 		Breaking  bool     `json:"breaking"`
 		Component []string `json:"component,omitempty"`
 		Audience  []string `json:"audience,omitempty"`
-		Priority  int      `json:"priority,omitempty"`
+		Rank      int      `json:"rank,omitempty"`
 		Issue     []string `json:"issue,omitempty"`
 		Release   string   `json:"release,omitempty"`
 		Preview   string   `json:"preview,omitempty"`
@@ -170,7 +170,7 @@ func RenderJSON(cl *ChangeLog, repoRoot string, w io.Writer) error {
 					Breaking:  entry.Entry.Breaking,
 					Component: entry.Entry.Component,
 					Audience:  entry.Entry.Audience,
-					Priority:  entry.Entry.Priority,
+					Rank:      entry.Entry.Priority,
 					Issue:     entry.Entry.Issue,
 					Release:   entry.Entry.Release,
 					Preview:   entry.Preview(),

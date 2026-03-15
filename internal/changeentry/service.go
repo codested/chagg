@@ -23,22 +23,23 @@ type Entry struct {
 }
 
 type Params struct {
-	Type         string
-	TypeSet      bool
-	Breaking     bool
-	BreakingSet  bool
-	Component    string
-	ComponentSet bool
-	Audience     string
-	AudienceSet  bool
-	Priority     int
-	PrioritySet  bool
-	Issue        string
-	IssueSet     bool
-	Release      string
-	ReleaseSet   bool
-	Body         string
-	BodySet      bool
+	Type            string
+	TypeSet         bool
+	Breaking        bool
+	BreakingSet     bool
+	Component       string
+	ComponentSet    bool
+	Audience        string
+	AudienceSet     bool
+	Rank            int
+	RankSet         bool
+	Issue           string
+	IssueSet        bool
+	Release         string
+	ReleaseSet      bool
+	Body            string
+	BodySet         bool
+	DefaultAudience []string
 }
 
 func CreateChange(startPath string, targetArg string, params Params, input io.Reader, output io.Writer, interactive bool) (string, error) {
@@ -205,12 +206,12 @@ func collectEntry(params Params, inferredType ChangeType, reader *bufio.Reader, 
 		return Entry{}, err
 	}
 
-	audience, err := resolveStringList(params.Audience, params.AudienceSet, reader, output, interactive, "Audience(s), comma separated", []string{DefaultAudience})
+	audience, err := resolveStringList(params.Audience, params.AudienceSet, reader, output, interactive, "Audience(s), comma separated", params.DefaultAudience)
 	if err != nil {
 		return Entry{}, err
 	}
 
-	priority, err := resolvePriority(params, reader, output, interactive)
+	rank, err := resolveRank(params, reader, output, interactive)
 	if err != nil {
 		return Entry{}, err
 	}
@@ -235,7 +236,7 @@ func collectEntry(params Params, inferredType ChangeType, reader *bufio.Reader, 
 		Breaking:  breaking,
 		Component: component,
 		Audience:  audience,
-		Priority:  priority,
+		Priority:  rank,
 		Issue:     issue,
 		Release:   release,
 		Body:      body,
@@ -308,9 +309,9 @@ func resolveStringList(flagValue string, isSet bool, reader *bufio.Reader, outpu
 	return values, nil
 }
 
-func resolvePriority(params Params, reader *bufio.Reader, output io.Writer, interactive bool) (int, error) {
-	if params.PrioritySet {
-		return params.Priority, nil
+func resolveRank(params Params, reader *bufio.Reader, output io.Writer, interactive bool) (int, error) {
+	if params.RankSet {
+		return params.Rank, nil
 	}
 
 	if !interactive {
@@ -318,18 +319,18 @@ func resolvePriority(params Params, reader *bufio.Reader, output io.Writer, inte
 	}
 
 	for {
-		value, err := promptString(reader, output, "Priority: ", "0")
+		value, err := promptString(reader, output, "Rank (higher numbers are shown first): ", "0")
 		if err != nil {
 			return 0, err
 		}
 
-		priority, parseErr := strconv.Atoi(value)
+		rank, parseErr := strconv.Atoi(value)
 		if parseErr != nil {
-			_, _ = fmt.Fprintln(output, "Priority must be an integer")
+			_, _ = fmt.Fprintln(output, "Rank must be an integer")
 			continue
 		}
 
-		return priority, nil
+		return rank, nil
 	}
 }
 

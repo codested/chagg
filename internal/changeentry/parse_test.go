@@ -53,6 +53,17 @@ func TestParseEntryAllowsUnknownFrontMatterFields(t *testing.T) {
 	}
 }
 
+func TestParseEntryAppliesConfiguredDefaultAudienceWhenMissing(t *testing.T) {
+	entry, errs := ParseEntryWithDefaults("Body", "fix__body.md", []string{"public", "developer"})
+	if len(errs) > 0 {
+		t.Fatalf("expected no errors, got %v", errs)
+	}
+
+	if len(entry.Audience) != 2 || entry.Audience[0] != "public" || entry.Audience[1] != "developer" {
+		t.Fatalf("expected default audience [public developer], got %#v", entry.Audience)
+	}
+}
+
 func TestParseEntryFailsForFilenameWithoutTypePrefix(t *testing.T) {
 	_, errs := ParseEntry("Body", "plain.md")
 	if len(errs) == 0 {

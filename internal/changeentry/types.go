@@ -12,10 +12,6 @@ const (
 	ChangeTypeDocs     ChangeType = "docs"
 )
 
-const (
-	DefaultAudience = "public"
-)
-
 var changeTypeAliases = map[string]ChangeType{
 	"feature":  ChangeTypeFeature,
 	"feat":     ChangeTypeFeature,

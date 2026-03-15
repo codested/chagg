@@ -7,8 +7,8 @@ breaking: true
 {{ yamlField "component" .Component }}{{- end }}
 {{- if .ShowAudience }}
 {{ yamlField "audience" .Audience }}{{- end }}
-{{- if .ShowPriority }}
-priority: {{ .Priority }}
+{{- if .ShowRank }}
+rank: {{ .Rank }}
 {{- end }}
 {{- if gt (len .Issue) 0 }}
 {{ yamlField "issue" .Issue }}{{- end }}

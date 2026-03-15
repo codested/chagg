@@ -78,6 +78,21 @@ git-write:
 - `git-write.allow.push-release-tag`: allow/disallow automatic `chagg release --push`.
 - Omit `git-write` entirely to use built-in defaults (all allowed).
 
+Optional default audience:
+
+```yaml
+default-audience: public
+```
+
+```yaml
+default-audience:
+  - public
+  - developer
+```
+
+- `default-audience` is optional and can be a single string or a list.
+- When omitted, entries without `audience` stay empty (no implicit audience).
+
 ## Change entry format
 
 Change type is encoded in the filename prefix, not in front matter.
@@ -103,7 +118,7 @@ component:
   - api
 audience: public
 breaking: true
-priority: 80
+rank: 80
 issue:
   - JIRA-410
 release: v2.1.0
@@ -116,15 +131,15 @@ Add OAuth login support.
 
 - `breaking` (optional, default `false`)
 - `component` (optional, string or list)
-- `audience` (optional, string or list, default `public`)
-- `priority` (optional, default `0`)
+- `audience` (optional, string or list, defaults to `default-audience` when configured)
+- `rank` (optional, default `0`; higher numbers are shown first)
 - `issue` (optional, string or list)
 - `release` (optional): pins this entry to a specific version
 - Additional custom front-matter fields are allowed and ignored by `chagg`.
 
 Notes:
 
-- Default values (`breaking: false`, `audience: public`, `priority: 0`) are omitted in newly rendered files.
+- Default values (`breaking: false`, empty audience/default-audience, `rank: 0`) are omitted in newly rendered files.
 - The body is free Markdown. `log` uses the first non-empty line as preview text.
 
 ## Commands
@@ -135,8 +150,9 @@ Creates a new entry file below `.changes`.
 
 - `chagg add auth/token-expiry --type fix` -> `.changes/auth/fix__token-expiry.md`
 - Missing directories are created automatically.
-- Supports flags for all entry properties (`--type`, `--breaking`, `--component`, `--audience`, `--priority`, `--issue`,
+- Supports flags for all entry properties (`--type`, `--breaking`, `--component`, `--audience`, `--rank`, `--issue`,
   `--release`, `--body`).
+- `--rank` controls ordering in changelog output (higher values first). `--priority` remains as an alias.
 - By default, new files are staged automatically (`git add`) after creation (built-in default).
 - Use `--no-git-add` to skip staging, or `--git-add` to force staging explicitly.
 - If the target filename already starts with a type prefix (for example `feat__login`), `--type` is optional.

@@ -107,6 +107,60 @@ func TestResolveModuleForChangesDirAppliesGlobalGitWriteAllowBool(t *testing.T) 
 	}
 }
 
+func TestResolveModuleForChangesDirReadsDefaultAudienceString(t *testing.T) {
+	tempDir := t.TempDir()
+	repoDir := filepath.Join(tempDir, "repo")
+	changesDir := filepath.Join(repoDir, ".changes")
+
+	if err := os.MkdirAll(changesDir, 0o755); err != nil {
+		t.Fatalf("mkdir .changes: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(repoDir, ".git"), 0o755); err != nil {
+		t.Fatalf("mkdir .git: %v", err)
+	}
+
+	config := "default-audience: public\nmodules:\n  - changes-dir: .changes\n"
+	if err := os.WriteFile(filepath.Join(repoDir, ".chagg.yaml"), []byte(config), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	module, err := ResolveModuleForChangesDir(repoDir, changesDir)
+	if err != nil {
+		t.Fatalf("ResolveModuleForChangesDir returned error: %v", err)
+	}
+
+	if len(module.DefaultAudience) != 1 || module.DefaultAudience[0] != "public" {
+		t.Fatalf("expected default audience [public], got %#v", module.DefaultAudience)
+	}
+}
+
+func TestResolveModuleForChangesDirReadsDefaultAudienceList(t *testing.T) {
+	tempDir := t.TempDir()
+	repoDir := filepath.Join(tempDir, "repo")
+	changesDir := filepath.Join(repoDir, ".changes")
+
+	if err := os.MkdirAll(changesDir, 0o755); err != nil {
+		t.Fatalf("mkdir .changes: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(repoDir, ".git"), 0o755); err != nil {
+		t.Fatalf("mkdir .git: %v", err)
+	}
+
+	config := "default-audience:\n  - public\n  - developer\nmodules:\n  - changes-dir: .changes\n"
+	if err := os.WriteFile(filepath.Join(repoDir, ".chagg.yaml"), []byte(config), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	module, err := ResolveModuleForChangesDir(repoDir, changesDir)
+	if err != nil {
+		t.Fatalf("ResolveModuleForChangesDir returned error: %v", err)
+	}
+
+	if len(module.DefaultAudience) != 2 || module.DefaultAudience[0] != "public" || module.DefaultAudience[1] != "developer" {
+		t.Fatalf("expected default audience [public developer], got %#v", module.DefaultAudience)
+	}
+}
+
 func TestResolveModuleForChangesDirInfersNameAndTagPrefixFromConfiguredChangesDir(t *testing.T) {
 	tempDir := t.TempDir()
 	repoDir := filepath.Join(tempDir, "repo")

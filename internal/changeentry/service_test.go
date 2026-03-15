@@ -116,7 +116,7 @@ func TestNormalizeTypeReturnsTypedValidationError(t *testing.T) {
 func TestRenderEntryOmitsDefaultFields(t *testing.T) {
 	entry := Entry{
 		Type:     ChangeTypeFeature,
-		Audience: []string{DefaultAudience},
+		Audience: nil,
 		Priority: 0,
 		Body:     "Test.",
 	}
@@ -161,8 +161,8 @@ func TestRenderEntryIncludesNonDefaultFields(t *testing.T) {
 		t.Fatalf("expected non-default audience to be included, got:\n%s", rendered)
 	}
 
-	if !strings.Contains(rendered, "priority: 10") {
-		t.Fatalf("expected non-default priority to be included, got:\n%s", rendered)
+	if !strings.Contains(rendered, "rank: 10") {
+		t.Fatalf("expected rank to be rendered, got:\n%s", rendered)
 	}
 }
 

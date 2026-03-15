@@ -17,8 +17,8 @@ type entryTemplateData struct {
 	Component    []string
 	Audience     []string
 	ShowAudience bool
-	Priority     int
-	ShowPriority bool
+	Rank         int
+	ShowRank     bool
 	Issue        []string
 	Release      string
 	Body         string
@@ -35,8 +35,8 @@ func RenderEntry(entry Entry) (string, error) {
 		Component:    entry.Component,
 		Audience:     entry.Audience,
 		ShowAudience: !isDefaultAudience(entry.Audience),
-		Priority:     entry.Priority,
-		ShowPriority: entry.Priority != 0,
+		Rank:         entry.Priority,
+		ShowRank:     entry.Priority != 0,
 		Issue:        entry.Issue,
 		Release:      entry.Release,
 		Body:         entry.Body,
@@ -69,9 +69,5 @@ func yamlField(name string, values []string) string {
 }
 
 func isDefaultAudience(values []string) bool {
-	if len(values) != 1 {
-		return false
-	}
-
-	return strings.EqualFold(strings.TrimSpace(values[0]), DefaultAudience)
+	return len(values) == 0
 }

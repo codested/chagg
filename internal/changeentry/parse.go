@@ -13,6 +13,7 @@ type frontMatter struct {
 	Breaking  bool         `yaml:"breaking"`
 	Component stringOrList `yaml:"component"`
 	Audience  stringOrList `yaml:"audience"`
+	Rank      int          `yaml:"rank"`
 	Priority  int          `yaml:"priority"`
 	Issue     stringOrList `yaml:"issue"`
 	Release   string       `yaml:"release"`
@@ -110,6 +111,10 @@ func InferTypeFromFilename(path string) (ChangeType, error) {
 // It returns the parsed Entry and a slice of validation errors encountered.
 // If the YAML structure is invalid, a single error is returned.
 func ParseEntry(content string, path string) (Entry, []error) {
+	return ParseEntryWithDefaults(content, path, nil)
+}
+
+func ParseEntryWithDefaults(content string, path string, defaultAudience []string) (Entry, []error) {
 	changeType, typeErr := InferTypeFromFilename(path)
 	if typeErr != nil {
 		return Entry{}, []error{typeErr}
@@ -129,7 +134,12 @@ func ParseEntry(content string, path string) (Entry, []error) {
 
 	audience := []string(fm.Audience)
 	if len(audience) == 0 {
-		audience = []string{DefaultAudience}
+		audience = append([]string(nil), defaultAudience...)
+	}
+
+	rank := fm.Rank
+	if rank == 0 {
+		rank = fm.Priority
 	}
 
 	return Entry{
@@ -137,7 +147,7 @@ func ParseEntry(content string, path string) (Entry, []error) {
 		Breaking:  fm.Breaking,
 		Component: fm.Component,
 		Audience:  audience,
-		Priority:  fm.Priority,
+		Priority:  rank,
 		Issue:     fm.Issue,
 		Release:   strings.TrimSpace(fm.Release),
 		Body:      strings.TrimSpace(parts.body),

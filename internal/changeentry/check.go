@@ -79,7 +79,7 @@ func FindAllChangesDirs(root string) ([]string, error) {
 
 // CheckChangesDir validates all ".md" files found recursively inside changesDir.
 // Each file is parsed and its validation errors are collected in CheckResult.
-func CheckChangesDir(changesDir string) ([]CheckResult, error) {
+func CheckChangesDir(changesDir string, module ModuleConfig) ([]CheckResult, error) {
 	var results []CheckResult
 
 	err := filepath.WalkDir(changesDir, func(path string, d os.DirEntry, err error) error {
@@ -102,7 +102,7 @@ func CheckChangesDir(changesDir string) ([]CheckResult, error) {
 			return nil
 		}
 
-		_, errs := ParseEntry(string(contentBytes), path)
+		_, errs := ParseEntryWithDefaults(string(contentBytes), path, module.DefaultAudience)
 		results = append(results, CheckResult{Path: path, Errors: errs})
 		return nil
 	})
@@ -130,12 +130,12 @@ func CheckAllChangesDirs(startPath string) ([]CheckResult, error) {
 
 	var allResults []CheckResult
 	for _, dir := range dirs {
-		results, dirErr := CheckChangesDir(dir)
+		module := modulesByDir[dir]
+		results, dirErr := CheckChangesDir(dir, module)
 		if dirErr != nil {
 			return nil, dirErr
 		}
 
-		module := modulesByDir[dir]
 		for i := range results {
 			results[i].Module = module
 		}

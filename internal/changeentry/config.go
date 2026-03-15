@@ -14,10 +14,11 @@ import (
 var ConfigFileNames = []string{".chagg.yaml", ".chagg.yml", "chagg.yml"}
 
 type ModuleConfig struct {
-	Name       string
-	ChangesDir string
-	TagPrefix  string
-	GitWrite   GitWritePolicy
+	Name            string
+	ChangesDir      string
+	TagPrefix       string
+	DefaultAudience []string
+	GitWrite        GitWritePolicy
 }
 
 type GitWritePolicy struct {
@@ -49,8 +50,9 @@ func (p GitWritePolicy) AllowsReleasePush() bool {
 }
 
 type configFile struct {
-	GitWrite GitWriteConfig `yaml:"git-write"`
-	Modules  []configModule `yaml:"modules"`
+	DefaultAudience audienceConfig `yaml:"default-audience"`
+	GitWrite        GitWriteConfig `yaml:"git-write"`
+	Modules         []configModule `yaml:"modules"`
 }
 
 type configModule struct {
@@ -61,6 +63,41 @@ type configModule struct {
 
 type GitWriteConfig struct {
 	Allow GitWriteAllowConfig `yaml:"allow"`
+}
+
+type audienceConfig []string
+
+func (a *audienceConfig) UnmarshalYAML(node *yaml.Node) error {
+	switch node.Kind {
+	case yaml.ScalarNode:
+		var value string
+		if err := node.Decode(&value); err != nil {
+			return err
+		}
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			*a = nil
+			return nil
+		}
+		*a = []string{trimmed}
+		return nil
+	case yaml.SequenceNode:
+		var values []string
+		if err := node.Decode(&values); err != nil {
+			return err
+		}
+		result := make([]string, 0, len(values))
+		for _, value := range values {
+			trimmed := strings.TrimSpace(value)
+			if trimmed != "" {
+				result = append(result, trimmed)
+			}
+		}
+		*a = result
+		return nil
+	default:
+		return fmt.Errorf("default-audience must be a string or list")
+	}
 }
 
 // GitWriteAllowConfig accepts either:
@@ -206,6 +243,7 @@ func loadModules(repoRoot string) ([]ModuleConfig, bool, string, error) {
 	}
 
 	globalGitWrite := applyGitWriteConfig(defaultGitWritePolicy(), file.GitWrite)
+	defaultAudience := normalizeAudience([]string(file.DefaultAudience))
 
 	modules := make([]ModuleConfig, 0, len(file.Modules))
 	seenNames := map[string]bool{}
@@ -241,10 +279,11 @@ func loadModules(repoRoot string) ([]ModuleConfig, bool, string, error) {
 			tagPrefix = inferredTagPrefix
 		}
 		modules = append(modules, ModuleConfig{
-			Name:       name,
-			ChangesDir: changesDirPath,
-			TagPrefix:  tagPrefix,
-			GitWrite:   globalGitWrite,
+			Name:            name,
+			ChangesDir:      changesDirPath,
+			TagPrefix:       tagPrefix,
+			DefaultAudience: defaultAudience,
+			GitWrite:        globalGitWrite,
 		})
 		seenNames[strings.ToLower(name)] = true
 		seenDirs[strings.ToLower(changesDirPath)] = true
@@ -310,11 +349,32 @@ func defaultModuleForChangesDir(repoRoot string, changesDir string) ModuleConfig
 	name, tagPrefix := inferModuleIdentity(repoRoot, changesDir)
 
 	return ModuleConfig{
-		Name:       name,
-		ChangesDir: changesDir,
-		TagPrefix:  tagPrefix,
-		GitWrite:   defaultGitWritePolicy(),
+		Name:            name,
+		ChangesDir:      changesDir,
+		TagPrefix:       tagPrefix,
+		DefaultAudience: nil,
+		GitWrite:        defaultGitWritePolicy(),
 	}
+}
+
+func normalizeAudience(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed != "" {
+			result = append(result, trimmed)
+		}
+	}
+
+	if len(result) == 0 {
+		return nil
+	}
+
+	return result
 }
 
 func inferModuleIdentity(repoRoot, changesDir string) (string, string) {

@@ -144,7 +144,7 @@ func loadEntries(repoRoot string, module changeentry.ModuleConfig, tags []Tag) (
 			return nil, nil, fmt.Errorf("read %s: %w", path, readErr)
 		}
 
-		entry, errs := changeentry.ParseEntry(string(contentBytes), path)
+		entry, errs := changeentry.ParseEntryWithDefaults(string(contentBytes), path, module.DefaultAudience)
 		if len(errs) > 0 {
 			invalidEntries = append(invalidEntries, InvalidEntry{Path: path, Errors: errs})
 			continue // keep collecting to report all invalid files at once
@@ -292,7 +292,7 @@ func buildChangeLog(entries []EntryWithMeta, tags []Tag) *ChangeLog {
 }
 
 func buildVersionGroup(version string, tag *Tag, entries []EntryWithMeta) VersionGroup {
-	// Sort: priority desc, then addedAt desc, then path asc (deterministic).
+	// Sort: rank desc (higher first), then addedAt desc, then path asc (deterministic).
 	sort.SliceStable(entries, func(i, j int) bool {
 		if entries[i].Entry.Priority != entries[j].Entry.Priority {
 			return entries[i].Entry.Priority > entries[j].Entry.Priority
