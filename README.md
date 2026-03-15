@@ -366,6 +366,204 @@ chagg release --dry-run
 chagg release --push
 ```
 
+### `chagg config`
+
+Inspect and modify chagg settings, similar to `git config`.
+
+```bash
+# show all resolved settings for the current module
+chagg config
+chagg config --list
+
+# read a specific setting (resolved across all layers)
+chagg config defaults.audience
+chagg config git.write.push-release-tag
+
+# set a value in the repo config (.chagg.yaml)
+chagg config defaults.audience public
+chagg config git.write.push-release-tag false
+
+# set a value in the user config (~/.config/chagg/config.yaml)
+chagg config --global defaults.audience public
+chagg config --global git.write.push-release-tag false
+
+# set a list value (space-separated or comma-separated)
+chagg config defaults.audience public internal
+chagg config defaults.audience "public,internal"
+
+# remove a key from the repo config
+chagg config --unset defaults.audience
+
+# remove a key from the user config
+chagg config --unset --global git.write.push-release-tag
+
+# list all available change types for the current module
+chagg config types
+```
+
+Supported keys:
+
+| Key                               | Type    | Description                              |
+|-----------------------------------|---------|------------------------------------------|
+| `defaults.audience`               | list    | Default audience for new entries         |
+| `defaults.rank`                   | integer | Default rank for new entries             |
+| `defaults.component`              | list    | Default component for new entries        |
+| `git.write.allow`                 | bool    | Global kill-switch for all git writes    |
+| `git.write.add-change`            | bool    | Stage new change files after `chagg add` |
+| `git.write.create-release-tag`    | bool    | Create local release tags                |
+| `git.write.push-release-tag`      | bool    | Push tags to origin automatically        |
+
+Scopes:
+
+- **Default (no flag)**: reads from or writes to the repo config (`.chagg.yaml`). All read operations always show the _resolved_ (effective) value after merging all layers.
+- **`--global`**: targets the user config (`~/.config/chagg/config.yaml` on macOS/Linux, `%AppData%\chagg\config.yaml` on Windows).
+
+## FAQ
+
+### How do I see what change types are available?
+
+```bash
+chagg config types
+```
+
+Output:
+
+```
+  ID              ALIASES                  BUMP     ORDER   TITLE
+  ──────────────  ───────────────────────  ───────  ──────  ────────────────────
+  feature         feat, enhancement        minor    0       Features
+  fix             bugfix, patch            patch    1       Bug Fixes
+  removal         remove                   minor    2       Removals
+  security        —                        patch    3       Security
+  docs            doc                      patch    4       Documentation
+```
+
+### How do I check the default bump level for a type?
+
+```bash
+chagg config types
+```
+
+Look at the `BUMP` column. You can override any type's default bump in the config:
+
+```yaml
+# .chagg.yaml
+types:
+  - id: security
+    default-bump: minor
+```
+
+Or check the effective setting after all layers are merged:
+
+```bash
+# .chagg.yaml currently overrides security to minor
+chagg config types
+#  security        —                        minor    3       Security
+```
+
+### How do I set a default audience so I don't have to type it every time?
+
+For all repos on this machine:
+
+```bash
+chagg config --global defaults.audience public
+```
+
+For just this repo (overrides user default):
+
+```bash
+chagg config defaults.audience public
+```
+
+For multiple audiences:
+
+```bash
+chagg config defaults.audience public internal
+```
+
+### How do I prevent chagg from automatically staging files?
+
+Disable it globally (for all repos):
+
+```bash
+chagg config --global git.write.add-change false
+```
+
+Or per repo:
+
+```bash
+chagg config git.write.add-change false
+```
+
+Or just for a single `add` invocation:
+
+```bash
+chagg add auth/fix --no-git-add
+```
+
+### How do I prevent chagg from pushing tags automatically?
+
+```bash
+chagg config --global git.write.push-release-tag false
+```
+
+This means `chagg release --push` will be rejected. To disable all git writes entirely:
+
+```bash
+chagg config --global git.write.allow false
+```
+
+### How do I see all resolved settings for the current module?
+
+```bash
+chagg config
+```
+
+Example output:
+
+```
+Defaults:
+  defaults.audience             = public
+  defaults.rank                 = 0
+  defaults.component            =
+
+Git write policy:
+  git.write.allow               = true
+  git.write.add-change          = true
+  git.write.create-release-tag  = true
+  git.write.push-release-tag    = false
+
+Types (use 'chagg config types' for details):
+  feature
+  fix
+  removal
+  security
+  docs
+```
+
+### How do I add a custom change type?
+
+Edit `.chagg.yaml` directly (custom types cannot be set via `chagg config` at the moment):
+
+```yaml
+# .chagg.yaml
+types:
+  - id: breaking
+    aliases: [break, bc]
+    title: Breaking Changes
+    default-bump: major
+    order: 0
+```
+
+Then verify it's loaded:
+
+```bash
+chagg config types
+#  breaking        break, bc                major    0       Breaking Changes
+#  feature         feat, enhancement        minor    1       Features
+#  ...
+```
+
 ## Typical release flow
 
 ```bash

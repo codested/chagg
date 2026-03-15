@@ -53,57 +53,57 @@ func (p GitWritePolicy) AllowsReleasePush() bool { return p.Enabled && p.Release
 
 // ── YAML raw structs ──────────────────────────────────────────────────────────
 
-// rawConfig is the YAML schema shared by both the user config and the repo
+// RawConfig is the YAML schema shared by both the user config and the repo
 // config.  The Modules field is only meaningful in the repo config.
-type rawConfig struct {
-	Defaults rawDefaults    `yaml:"defaults"`
-	Git      rawGit         `yaml:"git"`
-	Types    []rawTypeEntry `yaml:"types"`
-	Modules  []rawModule    `yaml:"modules"`
+type RawConfig struct {
+	Defaults RawDefaults    `yaml:"defaults,omitempty"`
+	Git      RawGit         `yaml:"git,omitempty"`
+	Types    []rawTypeEntry `yaml:"types,omitempty"`
+	Modules  []rawModule    `yaml:"modules,omitempty"`
 }
 
 type rawModule struct {
-	Name       string         `yaml:"name"`
-	ChangesDir string         `yaml:"changes-dir"`
-	TagPrefix  string         `yaml:"tag-prefix"`
-	Defaults   rawDefaults    `yaml:"defaults"`
-	Types      []rawTypeEntry `yaml:"types"`
+	Name       string         `yaml:"name,omitempty"`
+	ChangesDir string         `yaml:"changes-dir,omitempty"`
+	TagPrefix  string         `yaml:"tag-prefix,omitempty"`
+	Defaults   RawDefaults    `yaml:"defaults,omitempty"`
+	Types      []rawTypeEntry `yaml:"types,omitempty"`
 }
 
-type rawDefaults struct {
-	Audience  stringListConfig `yaml:"audience"`
-	Rank      *int             `yaml:"rank"`
-	Component stringListConfig `yaml:"component"`
+type RawDefaults struct {
+	Audience  StringListConfig `yaml:"audience,omitempty"`
+	Rank      *int             `yaml:"rank,omitempty"`
+	Component StringListConfig `yaml:"component,omitempty"`
 }
 
 type rawTypeEntry struct {
-	ID          string   `yaml:"id"`
-	Aliases     []string `yaml:"aliases"`
-	Title       string   `yaml:"title"`
-	DefaultBump string   `yaml:"default-bump"`
-	Order       *int     `yaml:"order"`
+	ID          string   `yaml:"id,omitempty"`
+	Aliases     []string `yaml:"aliases,omitempty"`
+	Title       string   `yaml:"title,omitempty"`
+	DefaultBump string   `yaml:"default-bump,omitempty"`
+	Order       *int     `yaml:"order,omitempty"`
 }
 
-type rawGit struct {
-	Write rawGitWrite `yaml:"write"`
+type RawGit struct {
+	Write RawGitWrite `yaml:"write,omitempty"`
 }
 
-type rawGitWrite struct {
-	Allow      *bool          `yaml:"allow"`
-	Operations rawGitWriteOps `yaml:"operations"`
+type RawGitWrite struct {
+	Allow      *bool          `yaml:"allow,omitempty"`
+	Operations RawGitWriteOps `yaml:"operations,omitempty"`
 }
 
-type rawGitWriteOps struct {
-	AddChange        *bool `yaml:"add-change"`
-	CreateReleaseTag *bool `yaml:"create-release-tag"`
-	PushReleaseTag   *bool `yaml:"push-release-tag"`
+type RawGitWriteOps struct {
+	AddChange        *bool `yaml:"add-change,omitempty"`
+	CreateReleaseTag *bool `yaml:"create-release-tag,omitempty"`
+	PushReleaseTag   *bool `yaml:"push-release-tag,omitempty"`
 }
 
-// stringListConfig is a YAML type that accepts either a scalar string or a
+// StringListConfig is a YAML type that accepts either a scalar string or a
 // sequence of strings, and stays nil when the field is absent.
-type stringListConfig []string
+type StringListConfig []string
 
-func (s *stringListConfig) UnmarshalYAML(node *yaml.Node) error {
+func (s *StringListConfig) UnmarshalYAML(node *yaml.Node) error {
 	switch node.Kind {
 	case yaml.ScalarNode:
 		trimmed := strings.TrimSpace(node.Value)
@@ -111,14 +111,14 @@ func (s *stringListConfig) UnmarshalYAML(node *yaml.Node) error {
 			*s = []string{}
 			return nil
 		}
-		*s = stringListConfig{trimmed}
+		*s = StringListConfig{trimmed}
 		return nil
 	case yaml.SequenceNode:
 		var values []string
 		if err := node.Decode(&values); err != nil {
 			return err
 		}
-		result := make(stringListConfig, 0, len(values))
+		result := make(StringListConfig, 0, len(values))
 		for _, v := range values {
 			if t := strings.TrimSpace(v); t != "" {
 				result = append(result, t)
@@ -146,11 +146,11 @@ func newResolvedLayer() resolvedLayer {
 	return resolvedLayer{types: cp, gitPolicy: defaultGitWritePolicy()}
 }
 
-func (l *resolvedLayer) applyGit(raw rawGitWrite) {
+func (l *resolvedLayer) applyGit(raw RawGitWrite) {
 	l.gitPolicy = applyGitWrite(l.gitPolicy, raw)
 }
 
-func (l *resolvedLayer) applyDefaults(raw rawDefaults) {
+func (l *resolvedLayer) applyDefaults(raw RawDefaults) {
 	l.defaults = mergeDefaults(l.defaults, raw)
 }
 
@@ -307,7 +307,7 @@ func ResolveModulesForChangesDirs(repoRoot string, changesDirs []string) (map[st
 // buildBaseLayer creates the accumulated config from code defaults → user
 // config → repo root config, returning the layer and the raw repo config
 // (nil when absent) for subsequent module-level processing.
-func buildBaseLayer(repoRoot string) (resolvedLayer, *rawConfig, string, error) {
+func buildBaseLayer(repoRoot string) (resolvedLayer, *RawConfig, string, error) {
 	layer := newResolvedLayer()
 
 	// User config.
@@ -341,7 +341,7 @@ func buildBaseLayer(repoRoot string) (resolvedLayer, *rawConfig, string, error) 
 
 // ── Raw config loaders ────────────────────────────────────────────────────────
 
-func loadRawUserConfig() (*rawConfig, error) {
+func loadRawUserConfig() (*RawConfig, error) {
 	path, hasConfig, err := resolveUserConfigPath()
 	if err != nil {
 		return nil, err
@@ -352,7 +352,7 @@ func loadRawUserConfig() (*rawConfig, error) {
 	return loadRawConfig(path, "user config")
 }
 
-func loadRawRepoConfig(repoRoot string) (*rawConfig, string, error) {
+func loadRawRepoConfig(repoRoot string) (*RawConfig, string, error) {
 	configPath, hasConfig, err := resolveConfigPath(repoRoot)
 	if err != nil {
 		return nil, "", err
@@ -369,12 +369,12 @@ func loadRawRepoConfig(repoRoot string) (*rawConfig, string, error) {
 	return cfg, configName, nil
 }
 
-func loadRawConfig(path, label string) (*rawConfig, error) {
+func loadRawConfig(path, label string) (*RawConfig, error) {
 	content, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
-	var cfg rawConfig
+	var cfg RawConfig
 	if err := yaml.Unmarshal(content, &cfg); err != nil {
 		return nil, NewValidationError("config", fmt.Sprintf("invalid %s: %s", label, err))
 	}
@@ -440,7 +440,7 @@ func resolveUserConfigPath() (string, bool, error) {
 
 // ── Merge helpers ─────────────────────────────────────────────────────────────
 
-func mergeDefaults(base Defaults, raw rawDefaults) Defaults {
+func mergeDefaults(base Defaults, raw RawDefaults) Defaults {
 	result := base
 	if raw.Audience != nil {
 		result.Audience = normalizeStringList([]string(raw.Audience))
@@ -557,7 +557,7 @@ func validateTypeAliasConflicts(defs []TypeDefinition) error {
 	return nil
 }
 
-func applyGitWrite(base GitWritePolicy, raw rawGitWrite) GitWritePolicy {
+func applyGitWrite(base GitWritePolicy, raw RawGitWrite) GitWritePolicy {
 	result := base
 	if raw.Allow != nil {
 		result.Enabled = *raw.Allow
@@ -623,7 +623,7 @@ func findRawModule(repoRoot string, modules []rawModule, absChangesDir string, c
 	return nil, nil
 }
 
-func hasExplicitModules(cfg *rawConfig) bool {
+func hasExplicitModules(cfg *RawConfig) bool {
 	return cfg != nil && len(cfg.Modules) > 0
 }
 
@@ -686,6 +686,27 @@ func containsSamePath(paths []string, target string) bool {
 
 func samePath(a, b string) bool {
 	return strings.EqualFold(filepath.Clean(a), filepath.Clean(b))
+}
+
+// ── Config write helpers ──────────────────────────────────────────────────────
+
+// writeRawConfig marshals cfg to YAML and writes it to path.
+func writeRawConfig(path string, cfg *RawConfig) error {
+	data, err := yaml.Marshal(cfg)
+	if err != nil {
+		return fmt.Errorf("marshal config: %w", err)
+	}
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		return fmt.Errorf("write config %s: %w", path, err)
+	}
+	return nil
+}
+
+// resolveUserConfigPathForWrite returns the user config path, always (even when
+// the file does not yet exist), so callers can create it.
+func resolveUserConfigPathForWrite() (string, error) {
+	path, _, err := resolveUserConfigPath()
+	return path, err
 }
 
 // ── String utilities ──────────────────────────────────────────────────────────

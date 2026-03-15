@@ -21,6 +21,7 @@ func main() {
 			commands.LogCommand(),
 			commands.GenerateCommand(),
 			commands.ReleaseCommand(),
+			commands.ConfigCommand(changeentry.NewFileConfigIO()),
 		},
 	}
 
