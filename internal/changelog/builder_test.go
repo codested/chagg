@@ -53,15 +53,15 @@ func TestLoadChangeLogUsesOriginalAddCommitForMovedFiles(t *testing.T) {
 		t.Fatalf("mkdir .changes: %v", err)
 	}
 
-	originalPath := filepath.Join(changesDir, "create-prototype.md")
-	entry := "---\ntype: feature\n---\n\nCreate prototype\n"
+	originalPath := filepath.Join(changesDir, "feature__create-prototype.md")
+	entry := "Create prototype\n"
 	if err := os.WriteFile(originalPath, []byte(entry), 0o644); err != nil {
 		t.Fatalf("write initial entry: %v", err)
 	}
 	mustGitAddCommit(t, repoDir, "add prototype entry")
 	mustGitTag(t, repoDir, "v0.1.0")
 
-	archivePath := filepath.Join(changesDir, "archive", "0.1.0", "create-prototype.md")
+	archivePath := filepath.Join(changesDir, "archive", "0.1.0", "feature__create-prototype.md")
 	if err := os.MkdirAll(filepath.Dir(archivePath), 0o755); err != nil {
 		t.Fatalf("mkdir archive target: %v", err)
 	}

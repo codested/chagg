@@ -144,7 +144,7 @@ func loadEntries(repoRoot string, module changeentry.ModuleConfig, tags []Tag) (
 			return nil, nil, fmt.Errorf("read %s: %w", path, readErr)
 		}
 
-		entry, errs := changeentry.ParseEntry(string(contentBytes))
+		entry, errs := changeentry.ParseEntry(string(contentBytes), path)
 		if len(errs) > 0 {
 			invalidEntries = append(invalidEntries, InvalidEntry{Path: path, Errors: errs})
 			continue // keep collecting to report all invalid files at once
@@ -152,17 +152,19 @@ func loadEntries(repoRoot string, module changeentry.ModuleConfig, tags []Tag) (
 
 		// Per-file lookup keeps --follow semantics so moved files are attributed
 		// to the commit where they originally entered history.
-		addedAt, hasGit := FileAddedAt(repoRoot, path)
+		addedAt, addedCommitHash, originalFilename, hasGit := FileAddedMeta(repoRoot, path)
 
 		version := resolveVersion(entry, addedAt, hasGit, tags)
 
 		entries = append(entries, EntryWithMeta{
-			Entry:   entry,
-			Module:  module,
-			Path:    path,
-			AddedAt: addedAt,
-			HasGit:  hasGit,
-			Version: version,
+			Entry:            entry,
+			Module:           module,
+			Path:             path,
+			AddedAt:          addedAt,
+			AddedCommitHash:  addedCommitHash,
+			OriginalFilename: originalFilename,
+			HasGit:           hasGit,
+			Version:          version,
 		})
 	}
 

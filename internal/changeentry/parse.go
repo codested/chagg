@@ -2,6 +2,7 @@ package changeentry
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -9,7 +10,6 @@ import (
 
 // frontMatter holds the raw YAML fields from a change entry file header.
 type frontMatter struct {
-	Type      string       `yaml:"type"`
 	Breaking  bool         `yaml:"breaking"`
 	Component stringOrList `yaml:"component"`
 	Audience  stringOrList `yaml:"audience"`
@@ -61,7 +61,7 @@ func splitFrontMatter(content string) (frontMatterParts, error) {
 	const delimiter = "---"
 
 	if !strings.HasPrefix(content, delimiter+"\n") {
-		return frontMatterParts{}, NewValidationError("format", "missing YAML front-matter (file must start with ---)")
+		return frontMatterParts{body: content}, nil
 	}
 
 	rest := content[len(delimiter)+1:] // skip "---\n"
@@ -78,29 +78,53 @@ func splitFrontMatter(content string) (frontMatterParts, error) {
 	return frontMatterParts{header: header, body: body}, nil
 }
 
+// InferTypeFromFilename resolves a change type from the filename prefix.
+// Accepted patterns are case-insensitive and include one or two underscores,
+// e.g. feat__login.md, FEAT__login.md, Feat_login.md.
+func InferTypeFromFilename(path string) (ChangeType, error) {
+	base := strings.ToLower(strings.TrimSpace(filepath.Base(path)))
+	if !strings.HasSuffix(base, ".md") {
+		return "", NewValidationError("path", fmt.Sprintf("change filename must end with .md: %s", filepath.Base(path)))
+	}
+
+	name := strings.TrimSuffix(base, ".md")
+	sep := strings.Index(name, "_")
+	if sep <= 0 {
+		return "", NewValidationError("path", fmt.Sprintf("change filename must start with <type>__ or <type>_: %s", filepath.Base(path)))
+	}
+
+	typePrefix := strings.TrimSpace(name[:sep])
+	if typePrefix == "" {
+		return "", NewValidationError("path", fmt.Sprintf("change filename must include a type prefix: %s", filepath.Base(path)))
+	}
+
+	changeType, err := NormalizeType(typePrefix)
+	if err != nil {
+		return "", NewValidationError("path", fmt.Sprintf("unsupported filename type prefix %q in %s", typePrefix, filepath.Base(path)))
+	}
+
+	return changeType, nil
+}
+
 // ParseEntry parses the content of a change entry file.
 // It returns the parsed Entry and a slice of validation errors encountered.
 // If the YAML structure is invalid, a single error is returned.
-func ParseEntry(content string) (Entry, []error) {
+func ParseEntry(content string, path string) (Entry, []error) {
+	changeType, typeErr := InferTypeFromFilename(path)
+	if typeErr != nil {
+		return Entry{}, []error{typeErr}
+	}
+
 	parts, err := splitFrontMatter(content)
 	if err != nil {
 		return Entry{}, []error{err}
 	}
 
 	var fm frontMatter
-	if yamlErr := yaml.Unmarshal([]byte(parts.header), &fm); yamlErr != nil {
-		return Entry{}, []error{NewValidationError("format", fmt.Sprintf("invalid YAML front-matter: %s", yamlErr))}
-	}
-
-	var errs []error
-
-	changeType, typeErr := NormalizeType(fm.Type)
-	if typeErr != nil {
-		errs = append(errs, typeErr)
-	}
-
-	if len(errs) > 0 {
-		return Entry{}, errs
+	if strings.TrimSpace(parts.header) != "" {
+		if yamlErr := yaml.Unmarshal([]byte(parts.header), &fm); yamlErr != nil {
+			return Entry{}, []error{NewValidationError("format", fmt.Sprintf("invalid YAML front-matter: %s", yamlErr))}
+		}
 	}
 
 	audience := []string(fm.Audience)

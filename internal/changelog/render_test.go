@@ -188,8 +188,10 @@ func TestRenderJSONProducesStructuredOutput(t *testing.T) {
 				ChangeType: changeentry.ChangeTypeFix,
 				Title:      "Bug Fixes",
 				Entries: []EntryWithMeta{{
-					Entry: changeentry.Entry{Type: changeentry.ChangeTypeFix, Body: "Fix bug."},
-					Path:  ".changes/fix.md",
+					Entry:            changeentry.Entry{Type: changeentry.ChangeTypeFix, Body: "Fix bug."},
+					Path:             ".changes/fix__bug.md",
+					OriginalFilename: "fix__bug.md",
+					AddedCommitHash:  "abc123def",
 				}},
 			}},
 		}},
@@ -207,5 +209,33 @@ func TestRenderJSONProducesStructuredOutput(t *testing.T) {
 
 	if payload["module"] != "default" {
 		t.Fatalf("expected module default, got %#v", payload["module"])
+	}
+
+	groups, ok := payload["groups"].([]any)
+	if !ok || len(groups) == 0 {
+		t.Fatalf("expected groups in payload")
+	}
+	firstGroup, ok := groups[0].(map[string]any)
+	if !ok {
+		t.Fatalf("expected first group object")
+	}
+	types, ok := firstGroup["types"].([]any)
+	if !ok || len(types) == 0 {
+		t.Fatalf("expected types in first group")
+	}
+	firstType, ok := types[0].(map[string]any)
+	if !ok {
+		t.Fatalf("expected first type object")
+	}
+	entries, ok := firstType["entries"].([]any)
+	if !ok || len(entries) == 0 {
+		t.Fatalf("expected entries in first type")
+	}
+	firstEntry, ok := entries[0].(map[string]any)
+	if !ok {
+		t.Fatalf("expected first entry object")
+	}
+	if firstEntry["id"] != "fix__bug.md@abc123def" {
+		t.Fatalf("expected entry id fix__bug.md@abc123def, got %#v", firstEntry["id"])
 	}
 }

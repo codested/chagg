@@ -1,6 +1,7 @@
 package changelog
 
 import (
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -10,12 +11,28 @@ import (
 // EntryWithMeta pairs a parsed change entry with the metadata derived from
 // git history: when the file was first committed and which version it belongs to.
 type EntryWithMeta struct {
-	Entry   changeentry.Entry
-	Module  changeentry.ModuleConfig
-	Path    string    // absolute path to the .md file
-	AddedAt time.Time // author date of the commit that first added the file
-	HasGit  bool      // false when the file is untracked or git is unavailable
-	Version string    // "staging" or a version tag name / pinned release value
+	Entry            changeentry.Entry
+	Module           changeentry.ModuleConfig
+	Path             string    // absolute path to the .md file
+	AddedAt          time.Time // author date of the commit that first added the file
+	AddedCommitHash  string    // commit hash where the file was first introduced
+	OriginalFilename string    // filename at first introduction
+	HasGit           bool      // false when the file is untracked or git is unavailable
+	Version          string    // "staging" or a version tag name / pinned release value
+}
+
+func (e EntryWithMeta) ID() string {
+	filename := strings.TrimSpace(e.OriginalFilename)
+	if filename == "" {
+		filename = filepath.Base(e.Path)
+	}
+
+	hash := strings.TrimSpace(e.AddedCommitHash)
+	if hash == "" {
+		hash = "untracked"
+	}
+
+	return filename + "@" + hash
 }
 
 // Preview returns the first non-empty, non-heading line of the entry body,

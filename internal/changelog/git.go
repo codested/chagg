@@ -225,6 +225,13 @@ func comparePreRelease(a string, b string) int {
 // correctly.  The second return value is false when the file has no recorded
 // git history (untracked, or git unavailable).
 func FileAddedAt(repoRoot, path string) (time.Time, bool) {
+	addedAt, _, _, hasGit := FileAddedMeta(repoRoot, path)
+	return addedAt, hasGit
+}
+
+// FileAddedMeta returns metadata for the commit that first introduced path,
+// following renames to preserve original attribution.
+func FileAddedMeta(repoRoot, path string) (time.Time, string, string, bool) {
 	relPath, relErr := filepath.Rel(repoRoot, path)
 	if relErr != nil {
 		relPath = path
@@ -234,22 +241,63 @@ func FileAddedAt(repoRoot, path string) (time.Time, bool) {
 	// --follow           : follow renames back to the original creation
 	// Newest commit first; we want the last line (the original add).
 	raw, err := runGit(repoRoot,
-		"log", "--diff-filter=A", "--follow", "--format=%aI", "--", relPath)
+		"log", "--diff-filter=A", "--follow", "--format=__CHAGG_ADD__%aI|%H", "--name-only", "--", relPath)
 	if err != nil {
-		return time.Time{}, false
+		return time.Time{}, "", "", false
 	}
 
 	lines := splitLines(strings.TrimSpace(raw))
 	if len(lines) == 0 {
-		return time.Time{}, false
+		return time.Time{}, "", "", false
 	}
 
-	t, parseErr := time.Parse(time.RFC3339, strings.TrimSpace(lines[len(lines)-1]))
-	if parseErr != nil {
-		return time.Time{}, false
+	var currentTime time.Time
+	var currentHash string
+	oldestTime := time.Time{}
+	oldestHash := ""
+	oldestFile := ""
+
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+
+		if strings.HasPrefix(line, "__CHAGG_ADD__") {
+			payload := strings.TrimPrefix(line, "__CHAGG_ADD__")
+			parts := strings.SplitN(payload, "|", 2)
+			if len(parts) != 2 {
+				currentTime = time.Time{}
+				currentHash = ""
+				continue
+			}
+
+			t, parseErr := time.Parse(time.RFC3339, strings.TrimSpace(parts[0]))
+			if parseErr != nil {
+				currentTime = time.Time{}
+				currentHash = ""
+				continue
+			}
+
+			currentTime = t
+			currentHash = strings.TrimSpace(parts[1])
+			continue
+		}
+
+		if currentTime.IsZero() {
+			continue
+		}
+
+		oldestTime = currentTime
+		oldestHash = currentHash
+		oldestFile = filepath.Base(strings.TrimSpace(filepath.FromSlash(line)))
 	}
 
-	return t, true
+	if oldestTime.IsZero() {
+		return time.Time{}, "", "", false
+	}
+
+	return oldestTime, oldestHash, oldestFile, true
 }
 
 // FileAddedAtMany returns add dates for multiple files using a single git log call.

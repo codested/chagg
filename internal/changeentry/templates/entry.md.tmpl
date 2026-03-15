@@ -1,5 +1,5 @@
+{{- if .ShowHeader }}
 ---
-type: {{ .Type }}
 {{- if .Breaking }}
 breaking: true
 {{- end }}
@@ -17,5 +17,8 @@ release: {{ .Release }}
 {{- end }}
 ---{{ if .Body }}
 
+{{ .Body }}
+{{- end }}
+{{- else if .Body }}
 {{ .Body }}
 {{- end }}

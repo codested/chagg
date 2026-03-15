@@ -168,8 +168,9 @@ func TestRenderEntryIncludesNonDefaultFields(t *testing.T) {
 
 func TestRenderEntryKeepsBlankLineBetweenHeaderAndBody(t *testing.T) {
 	entry := Entry{
-		Type: ChangeTypeDocs,
-		Body: "Document usage.",
+		Type:     ChangeTypeDocs,
+		Breaking: true,
+		Body:     "Document usage.",
 	}
 
 	rendered, err := RenderEntry(entry)
@@ -184,8 +185,9 @@ func TestRenderEntryKeepsBlankLineBetweenHeaderAndBody(t *testing.T) {
 
 func TestRenderEntryPlacesClosingDelimiterOnSeparateLine(t *testing.T) {
 	entry := Entry{
-		Type: ChangeTypeFix,
-		Body: "Body line",
+		Type:     ChangeTypeFix,
+		Breaking: true,
+		Body:     "Body line",
 	}
 
 	rendered, err := RenderEntry(entry)
@@ -193,8 +195,8 @@ func TestRenderEntryPlacesClosingDelimiterOnSeparateLine(t *testing.T) {
 		t.Fatalf("RenderEntry returned error: %v", err)
 	}
 
-	if strings.Contains(rendered, "type: fix---") {
-		t.Fatalf("expected closing delimiter not to be concatenated with type, got:\n%s", rendered)
+	if strings.Contains(rendered, "breaking: true---") {
+		t.Fatalf("expected closing delimiter not to be concatenated with header fields, got:\n%s", rendered)
 	}
 
 	if !strings.Contains(rendered, "---\n\nBody line") {
@@ -224,7 +226,7 @@ func TestCreateChangeCreatesTargetFileUnderChangesDirectory(t *testing.T) {
 		t.Fatalf("CreateChange returned error: %v", err)
 	}
 
-	expectedPath := filepath.Join(repoDir, ".changes", "auth", "token.md")
+	expectedPath := filepath.Join(repoDir, ".changes", "auth", "fix__token.md")
 	if path != expectedPath {
 		t.Fatalf("expected %q, got %q", expectedPath, path)
 	}
@@ -235,8 +237,8 @@ func TestCreateChangeCreatesTargetFileUnderChangesDirectory(t *testing.T) {
 	}
 
 	content := string(contentBytes)
-	if !strings.Contains(content, "type: fix") {
-		t.Fatalf("expected rendered entry to contain type, got:\n%s", content)
+	if strings.Contains(content, "type:") {
+		t.Fatalf("expected rendered entry to omit type front matter, got:\n%s", content)
 	}
 }
 
@@ -279,7 +281,7 @@ func TestCreateChangePromptsForPathWhenMissingInInteractiveMode(t *testing.T) {
 		t.Fatalf("CreateChange returned error: %v", err)
 	}
 
-	expected := filepath.Join(repoDir, ".changes", "auth", "token.md")
+	expected := filepath.Join(repoDir, ".changes", "auth", "fix__token.md")
 	if path != expected {
 		t.Fatalf("expected %q, got %q", expected, path)
 	}

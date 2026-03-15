@@ -12,7 +12,7 @@ import (
 var entryTemplateSource string
 
 type entryTemplateData struct {
-	Type         string
+	ShowHeader   bool
 	Breaking     bool
 	Component    []string
 	Audience     []string
@@ -30,7 +30,7 @@ var entryTemplate = template.Must(template.New("entry.md.tmpl").Funcs(template.F
 
 func RenderEntry(entry Entry) (string, error) {
 	data := entryTemplateData{
-		Type:         string(entry.Type),
+		ShowHeader:   entry.Breaking || len(entry.Component) > 0 || !isDefaultAudience(entry.Audience) || entry.Priority != 0 || len(entry.Issue) > 0 || strings.TrimSpace(entry.Release) != "",
 		Breaking:     entry.Breaking,
 		Component:    entry.Component,
 		Audience:     entry.Audience,

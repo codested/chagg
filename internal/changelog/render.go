@@ -119,6 +119,7 @@ func RenderMarkdown(cl *ChangeLog, w io.Writer) error {
 
 func RenderJSON(cl *ChangeLog, w io.Writer) error {
 	type jsonEntry struct {
+		ID        string   `json:"id"`
 		Path      string   `json:"path"`
 		Type      string   `json:"type"`
 		Breaking  bool     `json:"breaking"`
@@ -161,6 +162,7 @@ func RenderJSON(cl *ChangeLog, w io.Writer) error {
 			entries := make([]jsonEntry, 0, len(tg.Entries))
 			for _, entry := range tg.Entries {
 				entries = append(entries, jsonEntry{
+					ID:        entry.ID(),
 					Path:      entry.Path,
 					Type:      string(entry.Entry.Type),
 					Breaking:  entry.Entry.Breaking,

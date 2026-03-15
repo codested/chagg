@@ -80,11 +80,25 @@ git-write:
 
 ## Change entry format
 
-Each entry is a Markdown file with YAML front matter.
+Change type is encoded in the filename prefix, not in front matter.
+
+Filename schema (case-insensitive):
+
+- `<type>__<title>.md` (preferred)
+- `<type>_<title>.md` (also accepted)
+
+Examples:
+
+- `feature__oauth-login.md`
+- `FEAT__quick-fix.md`
+- `Feat_small-update.md`
+
+Supported type prefixes are aliases of: `feature`, `fix`, `removal`, `security`, `docs`.
+
+Front matter is optional and only needed for overrides.
 
 ```markdown
 ---
-type: feature
 component:
   - api
 audience: public
@@ -100,13 +114,13 @@ Add OAuth login support.
 
 ### Fields
 
-- `type` (required): `feature`, `fix`, `removal`, `security`, `docs`
 - `breaking` (optional, default `false`)
 - `component` (optional, string or list)
 - `audience` (optional, string or list, default `public`)
 - `priority` (optional, default `0`)
 - `issue` (optional, string or list)
 - `release` (optional): pins this entry to a specific version
+- Additional custom front-matter fields are allowed and ignored by `chagg`.
 
 Notes:
 
@@ -119,13 +133,14 @@ Notes:
 
 Creates a new entry file below `.changes`.
 
-- `chagg add auth/token-expiry` -> `.changes/auth/token-expiry.md`
+- `chagg add auth/token-expiry --type fix` -> `.changes/auth/fix__token-expiry.md`
 - Missing directories are created automatically.
 - Supports flags for all entry properties (`--type`, `--breaking`, `--component`, `--audience`, `--priority`, `--issue`,
   `--release`, `--body`).
 - By default, new files are staged automatically (`git add`) after creation (built-in default).
 - Use `--no-git-add` to skip staging, or `--git-add` to force staging explicitly.
-- If a value is not provided via flags, interactive mode prompts for it (required `type` is prompted if missing).
+- If the target filename already starts with a type prefix (for example `feat__login`), `--type` is optional.
+- If no filename prefix is present, `--type` (or interactive prompt) is used to add the prefix automatically.
 - If stdin is piped, prompts are skipped (no blocking).
 - `--no-prompt` forces non-interactive mode (recommended for CI and AI tooling).
 
@@ -142,7 +157,7 @@ chagg add prototype/ai-generated-note \
 
 Validates all change entry files in all discovered `.changes` directories.
 
-- Verifies YAML front matter and supported values.
+- Verifies filename type prefix schema and supported front-matter values.
 - Prints deterministic, module-grouped per-file validation results using repository-relative paths.
 - Prints a valid/invalid summary.
 - Returns non-zero exit code when invalid entries are found.

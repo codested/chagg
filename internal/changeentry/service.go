@@ -54,6 +54,11 @@ func CreateChange(startPath string, targetArg string, params Params, input io.Re
 		return "", err
 	}
 
+	resolvedTargetArg, inferredType, err := resolveTypedTargetPath(resolvedTargetArg, params, reader, output, interactive)
+	if err != nil {
+		return "", err
+	}
+
 	targetPath, err := BuildChangeFilePath(changesDir, resolvedTargetArg)
 	if err != nil {
 		return "", err
@@ -69,7 +74,7 @@ func CreateChange(startPath string, targetArg string, params Params, input io.Re
 		return "", err
 	}
 
-	entry, err := collectEntry(params, reader, output, interactive)
+	entry, err := collectEntry(params, inferredType, reader, output, interactive)
 	if err != nil {
 		return "", err
 	}
@@ -84,6 +89,27 @@ func CreateChange(startPath string, targetArg string, params Params, input io.Re
 	}
 
 	return targetPath, nil
+}
+
+func resolveTypedTargetPath(targetArg string, params Params, reader *bufio.Reader, output io.Writer, interactive bool) (string, ChangeType, error) {
+	if inferredType, err := InferTypeFromFilename(targetArg); err == nil {
+		return targetArg, inferredType, nil
+	}
+
+	resolvedType, err := resolveType(params, reader, output, interactive)
+	if err != nil {
+		return "", "", err
+	}
+
+	clean := filepath.Clean(targetArg)
+	dir := filepath.Dir(clean)
+	base := filepath.Base(clean)
+	typedBase := fmt.Sprintf("%s__%s", resolvedType, base)
+	if dir == "." {
+		return typedBase, resolvedType, nil
+	}
+
+	return filepath.Join(dir, typedBase), resolvedType, nil
 }
 
 func resolveTargetPathArg(targetArg string, reader *bufio.Reader, output io.Writer, interactive bool) (string, error) {
@@ -167,11 +193,7 @@ func BuildChangeFilePath(changesDir string, targetArg string) (string, error) {
 	return filepath.Join(changesDir, clean), nil
 }
 
-func collectEntry(params Params, reader *bufio.Reader, output io.Writer, interactive bool) (Entry, error) {
-	typeValue, err := resolveType(params, reader, output, interactive)
-	if err != nil {
-		return Entry{}, err
-	}
+func collectEntry(params Params, inferredType ChangeType, reader *bufio.Reader, output io.Writer, interactive bool) (Entry, error) {
 
 	breaking, err := resolveBreaking(params, reader, output, interactive)
 	if err != nil {
@@ -209,7 +231,7 @@ func collectEntry(params Params, reader *bufio.Reader, output io.Writer, interac
 	}
 
 	return Entry{
-		Type:      typeValue,
+		Type:      inferredType,
 		Breaking:  breaking,
 		Component: component,
 		Audience:  audience,
