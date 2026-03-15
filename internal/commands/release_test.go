@@ -56,7 +56,7 @@ func TestDetectBumpLevelMajorForBumpOverride(t *testing.T) {
 		}},
 	}
 
-	if level := detectBumpLevel(group); level != bumpMajor {
+	if level := detectBumpLevel(group, changeentry.DefaultTypeRegistry()); level != bumpMajor {
 		t.Fatalf("expected major bump, got %d", level)
 	}
 }
@@ -70,7 +70,7 @@ func TestDetectBumpLevelMinorForFeature(t *testing.T) {
 		}},
 	}
 
-	if level := detectBumpLevel(group); level != bumpMinor {
+	if level := detectBumpLevel(group, changeentry.DefaultTypeRegistry()); level != bumpMinor {
 		t.Fatalf("expected minor bump, got %d", level)
 	}
 }
@@ -84,7 +84,7 @@ func TestDetectBumpLevelMinorForRemoval(t *testing.T) {
 		}},
 	}
 
-	if level := detectBumpLevel(group); level != bumpMinor {
+	if level := detectBumpLevel(group, changeentry.DefaultTypeRegistry()); level != bumpMinor {
 		t.Fatalf("expected minor bump for removal (type default), got %d", level)
 	}
 }
@@ -98,7 +98,7 @@ func TestDetectBumpLevelPatchForFix(t *testing.T) {
 		}},
 	}
 
-	if level := detectBumpLevel(group); level != bumpPatch {
+	if level := detectBumpLevel(group, changeentry.DefaultTypeRegistry()); level != bumpPatch {
 		t.Fatalf("expected patch bump, got %d", level)
 	}
 }

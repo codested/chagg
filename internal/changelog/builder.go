@@ -12,23 +12,6 @@ import (
 	"github.com/codested/chagg/internal/changeentry"
 )
 
-// typeOrder controls the display order of change types within a version group.
-var typeOrder = []changeentry.ChangeType{
-	changeentry.ChangeTypeFeature,
-	changeentry.ChangeTypeFix,
-	changeentry.ChangeTypeRemoval,
-	changeentry.ChangeTypeSecurity,
-	changeentry.ChangeTypeDocs,
-}
-
-var typeTitles = map[changeentry.ChangeType]string{
-	changeentry.ChangeTypeFeature:  "Features",
-	changeentry.ChangeTypeFix:      "Bug Fixes",
-	changeentry.ChangeTypeRemoval:  "Removals",
-	changeentry.ChangeTypeSecurity: "Security",
-	changeentry.ChangeTypeDocs:     "Documentation",
-}
-
 // LoadChangeLog reads every .md file from changesDir, resolves each file's
 // version using git tags discovered at repoRoot, applies filter, and returns
 // the fully grouped changelog.
@@ -53,7 +36,7 @@ func LoadChangeLog(repoRoot string, module changeentry.ModuleConfig, filter Filt
 
 	entries = applyFilter(entries, filter)
 
-	cl := buildChangeLog(entries, tags)
+	cl := buildChangeLog(entries, tags, module)
 	cl.Module = module
 	cl.InvalidEntries = invalidEntries
 	return cl, nil
@@ -154,7 +137,7 @@ func loadEntries(repoRoot string, module changeentry.ModuleConfig, tags []Tag) (
 			return nil, nil, fmt.Errorf("read %s: %w", path, readErr)
 		}
 
-		entry, errs := changeentry.ParseEntryWithDefaults(string(contentBytes), path, module.DefaultAudience)
+		entry, errs := changeentry.ParseEntry(string(contentBytes), path, module)
 		if len(errs) > 0 {
 			invalidEntries = append(invalidEntries, InvalidEntry{Path: path, Errors: errs})
 			continue // keep collecting to report all invalid files at once
@@ -224,7 +207,6 @@ func pluralizeCount(n int, singular, plural string) string {
 	if n == 1 {
 		return singular
 	}
-
 	return plural
 }
 
@@ -238,7 +220,6 @@ func pluralizeCount(n int, singular, plural string) string {
 //  3. Fallback: "staging".
 func resolveVersion(entry changeentry.Entry, addedAt time.Time, hasGit bool, tags []Tag) string {
 	if entry.Release != "" {
-		// Try to find a tag whose name matches the pinned value.
 		for _, tag := range tags {
 			if releaseMatchesTag(entry.Release, tag) {
 				return tag.Name
@@ -262,7 +243,7 @@ func resolveVersion(entry changeentry.Entry, addedAt time.Time, hasGit bool, tag
 	return "staging"
 }
 
-func buildChangeLog(entries []EntryWithMeta, tags []Tag) *ChangeLog {
+func buildChangeLog(entries []EntryWithMeta, tags []Tag, module changeentry.ModuleConfig) *ChangeLog {
 	groupMap := make(map[string][]EntryWithMeta)
 	for _, e := range entries {
 		groupMap[e.Version] = append(groupMap[e.Version], e)
@@ -272,7 +253,7 @@ func buildChangeLog(entries []EntryWithMeta, tags []Tag) *ChangeLog {
 
 	// Staging first.
 	if stagingEntries, ok := groupMap["staging"]; ok {
-		groups = append(groups, buildVersionGroup("staging", nil, stagingEntries))
+		groups = append(groups, buildVersionGroup("staging", nil, stagingEntries, module))
 	}
 
 	// Tagged versions, newest → oldest (tags slice is oldest → newest).
@@ -281,7 +262,7 @@ func buildChangeLog(entries []EntryWithMeta, tags []Tag) *ChangeLog {
 		tag := tags[i]
 		tagSet[tag.Name] = true
 		if tagEntries, ok := groupMap[tag.Name]; ok {
-			groups = append(groups, buildVersionGroup(tag.Name, new(tag), tagEntries))
+			groups = append(groups, buildVersionGroup(tag.Name, new(tag), tagEntries, module))
 		}
 	}
 
@@ -295,13 +276,13 @@ func buildChangeLog(entries []EntryWithMeta, tags []Tag) *ChangeLog {
 	}
 	sort.Sort(sort.Reverse(sort.StringSlice(untagged))) // deterministic ordering
 	for _, version := range untagged {
-		groups = append(groups, buildVersionGroup(version, nil, groupMap[version]))
+		groups = append(groups, buildVersionGroup(version, nil, groupMap[version], module))
 	}
 
 	return &ChangeLog{Groups: groups}
 }
 
-func buildVersionGroup(version string, tag *Tag, entries []EntryWithMeta) VersionGroup {
+func buildVersionGroup(version string, tag *Tag, entries []EntryWithMeta, module changeentry.ModuleConfig) VersionGroup {
 	// Sort: rank desc (higher first), then addedAt desc, then path asc (deterministic).
 	sort.SliceStable(entries, func(i, j int) bool {
 		if entries[i].Entry.Rank != entries[j].Entry.Rank {
@@ -318,12 +299,13 @@ func buildVersionGroup(version string, tag *Tag, entries []EntryWithMeta) Versio
 		typeMap[e.Entry.Type] = append(typeMap[e.Entry.Type], e)
 	}
 
+	// Build type groups in the order defined by the module's type registry.
 	var typeGroups []TypeGroup
-	for _, ct := range typeOrder {
-		if typeEntries, ok := typeMap[ct]; ok {
+	for _, def := range module.Types.Definitions() {
+		if typeEntries, ok := typeMap[def.ID]; ok {
 			typeGroups = append(typeGroups, TypeGroup{
-				ChangeType: ct,
-				Title:      typeTitles[ct],
+				ChangeType: def.ID,
+				Title:      def.Title,
 				Entries:    typeEntries,
 			})
 		}

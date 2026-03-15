@@ -87,7 +87,7 @@ func TestBuildChangeFilePathDoesNotDuplicateExtension(t *testing.T) {
 }
 
 func TestNormalizeTypeAlias(t *testing.T) {
-	normalized, err := NormalizeType("feat")
+	normalized, err := DefaultTypeRegistry().NormalizeType("feat")
 	if err != nil {
 		t.Fatalf("NormalizeType returned error: %v", err)
 	}
@@ -98,7 +98,7 @@ func TestNormalizeTypeAlias(t *testing.T) {
 }
 
 func TestNormalizeTypeReturnsTypedValidationError(t *testing.T) {
-	_, err := NormalizeType("unsupported")
+	_, err := DefaultTypeRegistry().NormalizeType("unsupported")
 	if err == nil {
 		t.Fatalf("expected error")
 	}
@@ -221,7 +221,7 @@ func TestCreateChangeCreatesTargetFileUnderChangesDirectory(t *testing.T) {
 		TypeSet: true,
 	}
 
-	path, err := CreateChange(changesDir, "auth/token", params, strings.NewReader(""), bytes.NewBuffer(nil), false)
+	path, err := CreateChange(ModuleConfig{ChangesDir: changesDir, Types: DefaultTypeRegistry()}, "auth/token", params, strings.NewReader(""), bytes.NewBuffer(nil), false)
 	if err != nil {
 		t.Fatalf("CreateChange returned error: %v", err)
 	}
@@ -251,7 +251,7 @@ func TestCreateChangeReturnsValidationErrorWithoutPromptInNonInteractiveMode(t *
 	}
 
 	output := bytes.NewBuffer(nil)
-	_, err := CreateChange(filepath.Join(repoDir, ".changes"), "auth/token", Params{}, strings.NewReader(""), output, false)
+	_, err := CreateChange(ModuleConfig{ChangesDir: filepath.Join(repoDir, ".changes"), Types: DefaultTypeRegistry()}, "auth/token", Params{}, strings.NewReader(""), output, false)
 	if err == nil {
 		t.Fatalf("expected error")
 	}
@@ -276,7 +276,7 @@ func TestCreateChangePromptsForPathWhenMissingInInteractiveMode(t *testing.T) {
 	params := Params{Type: "fix", TypeSet: true}
 	output := bytes.NewBuffer(nil)
 
-	path, err := CreateChange(filepath.Join(repoDir, ".changes"), "", params, strings.NewReader("auth/token\n"), output, true)
+	path, err := CreateChange(ModuleConfig{ChangesDir: filepath.Join(repoDir, ".changes"), Types: DefaultTypeRegistry()}, "", params, strings.NewReader("auth/token\n"), output, true)
 	if err != nil {
 		t.Fatalf("CreateChange returned error: %v", err)
 	}
@@ -303,7 +303,7 @@ func TestCreateChangeReturnsValidationErrorWhenPathMissingNonInteractive(t *test
 		t.Fatalf("mkdir .git: %v", err)
 	}
 
-	_, err := CreateChange(filepath.Join(repoDir, ".changes"), "", Params{Type: "fix", TypeSet: true}, strings.NewReader(""), bytes.NewBuffer(nil), false)
+	_, err := CreateChange(ModuleConfig{ChangesDir: filepath.Join(repoDir, ".changes"), Types: DefaultTypeRegistry()}, "", Params{Type: "fix", TypeSet: true}, strings.NewReader(""), bytes.NewBuffer(nil), false)
 	if err == nil {
 		t.Fatalf("expected error")
 	}

@@ -36,7 +36,7 @@ func LogCommand() *cli.Command {
 			},
 			&cli.StringFlag{
 				Name:  "type",
-				Usage: changeentry.TypeFlagUsage(),
+				Usage: changeentry.DefaultTypeRegistry().TypeFlagUsage(),
 			},
 			&cli.IntFlag{
 				Name:  "preview-length",
@@ -120,7 +120,7 @@ func computeVersionHints(module changeentry.ModuleConfig, tags []changelog.Tag, 
 		if !hasLatest {
 			nextText = module.TagPrefix + "0.1.0"
 		} else {
-			next := bumpVersion(latestTag.Version, detectBumpLevel(staging.Groups[0]))
+			next := bumpVersion(latestTag.Version, detectBumpLevel(staging.Groups[0], module.Types))
 			nextText = module.TagPrefix + next.String(latestTag.HasVPrefix)
 		}
 	}

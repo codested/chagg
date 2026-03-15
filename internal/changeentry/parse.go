@@ -93,10 +93,10 @@ func splitFrontMatter(content string) (frontMatterParts, error) {
 	return frontMatterParts{header: header, body: body}, nil
 }
 
-// InferTypeFromFilename resolves a change type from the filename prefix.
-// Accepted patterns are case-insensitive and include one or two underscores,
-// e.g. feat__login.md, FEAT__login.md, Feat_login.md.
-func InferTypeFromFilename(path string) (ChangeType, error) {
+// InferTypeFromFilename resolves a change type from the filename prefix using
+// the provided type registry.  Accepted patterns are case-insensitive and
+// include one or two underscores, e.g. feat__login.md, Feat_login.md.
+func InferTypeFromFilename(path string, registry TypeRegistry) (ChangeType, error) {
 	base := strings.ToLower(strings.TrimSpace(filepath.Base(path)))
 	if !strings.HasSuffix(base, ".md") {
 		return "", NewValidationError("path", fmt.Sprintf("change filename must end with .md: %s", filepath.Base(path)))
@@ -113,7 +113,7 @@ func InferTypeFromFilename(path string) (ChangeType, error) {
 		return "", NewValidationError("path", fmt.Sprintf("change filename must include a type prefix: %s", filepath.Base(path)))
 	}
 
-	changeType, err := NormalizeType(typePrefix)
+	changeType, err := registry.NormalizeType(typePrefix)
 	if err != nil {
 		return "", NewValidationError("path", fmt.Sprintf("unsupported filename type prefix %q in %s", typePrefix, filepath.Base(path)))
 	}
@@ -121,15 +121,12 @@ func InferTypeFromFilename(path string) (ChangeType, error) {
 	return changeType, nil
 }
 
-// ParseEntry parses the content of a change entry file.
-// It returns the parsed Entry and a slice of validation errors encountered.
-// If the YAML structure is invalid, a single error is returned.
-func ParseEntry(content string, path string) (Entry, []error) {
-	return ParseEntryWithDefaults(content, path, nil)
-}
-
-func ParseEntryWithDefaults(content string, path string, defaultAudience []string) (Entry, []error) {
-	changeType, typeErr := InferTypeFromFilename(path)
+// ParseEntry parses the content of a change entry file using the type
+// registry and defaults from module.  It returns the parsed Entry and any
+// validation errors.  If the YAML structure is invalid, a single error is
+// returned.
+func ParseEntry(content string, path string, module ModuleConfig) (Entry, []error) {
+	changeType, typeErr := InferTypeFromFilename(path, module.Types)
 	if typeErr != nil {
 		return Entry{}, []error{typeErr}
 	}
@@ -148,7 +145,7 @@ func ParseEntryWithDefaults(content string, path string, defaultAudience []strin
 
 	audience := append([]string(nil), fm.Audience.Values...)
 	if !fm.Audience.IsSet {
-		audience = append([]string(nil), defaultAudience...)
+		audience = append([]string(nil), module.Defaults.Audience...)
 	}
 
 	bumpLevel, bumpErr := NormalizeBumpLevel(fm.Bump)

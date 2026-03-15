@@ -57,7 +57,7 @@ func GenerateCommand() *cli.Command {
 			},
 			&cli.StringFlag{
 				Name:  "type",
-				Usage: changeentry.TypeFlagUsage(),
+				Usage: changeentry.DefaultTypeRegistry().TypeFlagUsage(),
 			},
 		},
 		Action: generateAction,

@@ -137,7 +137,7 @@ func releaseAction(_ context.Context, cmd *cli.Command) error {
 		withVPrefix = hasVPrefix
 	} else {
 		withVPrefix = latestStableTag.HasVPrefix
-		bump := detectBumpLevel(staging.Groups[0])
+		bump := detectBumpLevel(staging.Groups[0], module.Types)
 		nextVersion = bumpVersion(latestStableTag.Version, bump)
 	}
 
@@ -221,11 +221,11 @@ func (m releaseMode) requiresGitWrites() bool {
 	return m.willCreateTag || m.pushTag
 }
 
-func detectBumpLevel(group changelog.VersionGroup) int {
+func detectBumpLevel(group changelog.VersionGroup, registry changeentry.TypeRegistry) int {
 	level := bumpPatch
 	for _, tg := range group.TypeGroups {
 		for _, entry := range tg.Entries {
-			entryLevel := effectiveBumpInt(entry.Entry)
+			entryLevel := effectiveBumpInt(entry.Entry, registry)
 			if entryLevel > level {
 				level = entryLevel
 				if level == bumpMajor {
@@ -238,11 +238,12 @@ func detectBumpLevel(group changelog.VersionGroup) int {
 }
 
 // effectiveBumpInt returns the resolved integer bump level for a single entry.
-// It respects an explicit Bump override, falling back to the type-based default.
-func effectiveBumpInt(entry changeentry.Entry) int {
+// It respects an explicit Bump override, falling back to the type-based default
+// from the provided registry.
+func effectiveBumpInt(entry changeentry.Entry, registry changeentry.TypeRegistry) int {
 	bump := entry.Bump
 	if bump == "" {
-		bump = changeentry.DefaultBumpLevel(entry.Type)
+		bump = registry.DefaultBumpLevel(entry.Type)
 	}
 	switch bump {
 	case changeentry.BumpLevelMajor:

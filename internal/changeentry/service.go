@@ -22,27 +22,32 @@ type Entry struct {
 	Body      string
 }
 
+// Params carries CLI-provided values for a new change entry.
+// Defaults carries the resolved per-module defaults used when a field is not
+// explicitly set.
 type Params struct {
-	Type            string
-	TypeSet         bool
-	Bump            string
-	BumpSet         bool
-	Component       string
-	ComponentSet    bool
-	Audience        string
-	AudienceSet     bool
-	Rank            int
-	RankSet         bool
-	Issue           string
-	IssueSet        bool
-	Release         string
-	ReleaseSet      bool
-	Body            string
-	BodySet         bool
-	DefaultAudience []string
+	Type        string
+	TypeSet     bool
+	Bump        string
+	BumpSet     bool
+	Component   string
+	ComponentSet bool
+	Audience    string
+	AudienceSet bool
+	Rank        int
+	RankSet     bool
+	Issue       string
+	IssueSet    bool
+	Release     string
+	ReleaseSet  bool
+	Body        string
+	BodySet     bool
+	Defaults    Defaults
 }
 
-func CreateChange(changesDir string, targetArg string, params Params, input io.Reader, output io.Writer, interactive bool) (string, error) {
+// CreateChange creates a new change entry file under module.ChangesDir.
+// The caller is responsible for ensuring the directory already exists.
+func CreateChange(module ModuleConfig, targetArg string, params Params, input io.Reader, output io.Writer, interactive bool) (string, error) {
 	reader := bufio.NewReader(input)
 
 	resolvedTargetArg, err := resolveTargetPathArg(targetArg, reader, output, interactive)
@@ -50,12 +55,12 @@ func CreateChange(changesDir string, targetArg string, params Params, input io.R
 		return "", err
 	}
 
-	resolvedTargetArg, inferredType, err := resolveTypedTargetPath(resolvedTargetArg, params, reader, output, interactive)
+	resolvedTargetArg, inferredType, err := resolveTypedTargetPath(resolvedTargetArg, module.Types, params, reader, output, interactive)
 	if err != nil {
 		return "", err
 	}
 
-	targetPath, err := BuildChangeFilePath(changesDir, resolvedTargetArg)
+	targetPath, err := BuildChangeFilePath(module.ChangesDir, resolvedTargetArg)
 	if err != nil {
 		return "", err
 	}
@@ -70,7 +75,7 @@ func CreateChange(changesDir string, targetArg string, params Params, input io.R
 		return "", err
 	}
 
-	entry, err := collectEntry(params, inferredType, reader, output, interactive)
+	entry, err := collectEntry(module, params, inferredType, reader, output, interactive)
 	if err != nil {
 		return "", err
 	}
@@ -87,12 +92,12 @@ func CreateChange(changesDir string, targetArg string, params Params, input io.R
 	return targetPath, nil
 }
 
-func resolveTypedTargetPath(targetArg string, params Params, reader *bufio.Reader, output io.Writer, interactive bool) (string, ChangeType, error) {
-	if inferredType, err := InferTypeFromFilename(targetArg); err == nil {
+func resolveTypedTargetPath(targetArg string, registry TypeRegistry, params Params, reader *bufio.Reader, output io.Writer, interactive bool) (string, ChangeType, error) {
+	if inferredType, err := InferTypeFromFilename(targetArg, registry); err == nil {
 		return targetArg, inferredType, nil
 	}
 
-	resolvedType, err := resolveType(params, reader, output, interactive)
+	resolvedType, err := resolveType(registry, params, reader, output, interactive)
 	if err != nil {
 		return "", "", err
 	}
@@ -189,19 +194,18 @@ func BuildChangeFilePath(changesDir string, targetArg string) (string, error) {
 	return filepath.Join(changesDir, clean), nil
 }
 
-func collectEntry(params Params, inferredType ChangeType, reader *bufio.Reader, output io.Writer, interactive bool) (Entry, error) {
-
+func collectEntry(module ModuleConfig, params Params, inferredType ChangeType, reader *bufio.Reader, output io.Writer, interactive bool) (Entry, error) {
 	bump, err := resolveBump(params, reader, output, interactive)
 	if err != nil {
 		return Entry{}, err
 	}
 
-	component, err := resolveStringList(params.Component, params.ComponentSet, reader, output, interactive, "Component(s), comma separated", nil)
+	component, err := resolveStringList(params.Component, params.ComponentSet, reader, output, interactive, "Component(s), comma separated", params.Defaults.Component)
 	if err != nil {
 		return Entry{}, err
 	}
 
-	audience, err := resolveStringList(params.Audience, params.AudienceSet, reader, output, interactive, "Audience(s), comma separated", params.DefaultAudience)
+	audience, err := resolveStringList(params.Audience, params.AudienceSet, reader, output, interactive, "Audience(s), comma separated", params.Defaults.Audience)
 	if err != nil {
 		return Entry{}, err
 	}
@@ -238,11 +242,11 @@ func collectEntry(params Params, inferredType ChangeType, reader *bufio.Reader, 
 	}, nil
 }
 
-func resolveType(params Params, reader *bufio.Reader, output io.Writer, interactive bool) (ChangeType, error) {
+func resolveType(registry TypeRegistry, params Params, reader *bufio.Reader, output io.Writer, interactive bool) (ChangeType, error) {
 	if params.TypeSet {
 		flagValue := strings.TrimSpace(params.Type)
 		if flagValue != "" {
-			return NormalizeType(flagValue)
+			return registry.NormalizeType(flagValue)
 		}
 	}
 
@@ -251,12 +255,12 @@ func resolveType(params Params, reader *bufio.Reader, output io.Writer, interact
 	}
 
 	for {
-		value, err := promptString(reader, output, TypePrompt(), "")
+		value, err := promptString(reader, output, registry.TypePrompt(), "")
 		if err != nil {
 			return "", err
 		}
 
-		normalized, err := NormalizeType(value)
+		normalized, err := registry.NormalizeType(value)
 		if err != nil {
 			_, _ = fmt.Fprintln(output, err)
 			continue
@@ -327,11 +331,12 @@ func resolveRank(params Params, reader *bufio.Reader, output io.Writer, interact
 	}
 
 	if !interactive {
-		return 0, nil
+		return params.Defaults.Rank, nil
 	}
 
+	defaultText := strconv.Itoa(params.Defaults.Rank)
 	for {
-		value, err := promptString(reader, output, "Rank (higher numbers are shown first): ", "0")
+		value, err := promptString(reader, output, "Rank (higher numbers are shown first): ", defaultText)
 		if err != nil {
 			return 0, err
 		}

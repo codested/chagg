@@ -2,7 +2,12 @@ package changeentry
 
 import "testing"
 
+func defaultTestModule() ModuleConfig {
+	return ModuleConfig{Types: DefaultTypeRegistry()}
+}
+
 func TestInferTypeFromFilenameAcceptsAliasesAndCase(t *testing.T) {
+	registry := DefaultTypeRegistry()
 	cases := []struct {
 		path string
 		want ChangeType
@@ -14,7 +19,7 @@ func TestInferTypeFromFilenameAcceptsAliasesAndCase(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		got, err := InferTypeFromFilename(tc.path)
+		got, err := InferTypeFromFilename(tc.path, registry)
 		if err != nil {
 			t.Fatalf("InferTypeFromFilename(%q) returned error: %v", tc.path, err)
 		}
@@ -25,7 +30,7 @@ func TestInferTypeFromFilenameAcceptsAliasesAndCase(t *testing.T) {
 }
 
 func TestParseEntryAllowsBodyWithoutFrontMatter(t *testing.T) {
-	entry, errs := ParseEntry("Body only", "feat__body.md")
+	entry, errs := ParseEntry("Body only", "feat__body.md", defaultTestModule())
 	if len(errs) > 0 {
 		t.Fatalf("expected no errors, got %v", errs)
 	}
@@ -40,7 +45,7 @@ func TestParseEntryAllowsBodyWithoutFrontMatter(t *testing.T) {
 
 func TestParseEntryAllowsUnknownFrontMatterFields(t *testing.T) {
 	content := "---\ncustom: value\n---\n\nDocs body"
-	entry, errs := ParseEntry(content, "docs__custom.md")
+	entry, errs := ParseEntry(content, "docs__custom.md", defaultTestModule())
 	if len(errs) > 0 {
 		t.Fatalf("expected no errors, got %v", errs)
 	}
@@ -54,7 +59,11 @@ func TestParseEntryAllowsUnknownFrontMatterFields(t *testing.T) {
 }
 
 func TestParseEntryAppliesConfiguredDefaultAudienceWhenMissing(t *testing.T) {
-	entry, errs := ParseEntryWithDefaults("Body", "fix__body.md", []string{"public", "developer"})
+	module := ModuleConfig{
+		Types:    DefaultTypeRegistry(),
+		Defaults: Defaults{Audience: []string{"public", "developer"}},
+	}
+	entry, errs := ParseEntry("Body", "fix__body.md", module)
 	if len(errs) > 0 {
 		t.Fatalf("expected no errors, got %v", errs)
 	}
@@ -66,7 +75,11 @@ func TestParseEntryAppliesConfiguredDefaultAudienceWhenMissing(t *testing.T) {
 
 func TestParseEntryExplicitEmptyAudienceOverridesConfiguredDefault(t *testing.T) {
 	content := "---\naudience: []\n---\n\nBody"
-	entry, errs := ParseEntryWithDefaults(content, "fix__body.md", []string{"public", "developer"})
+	module := ModuleConfig{
+		Types:    DefaultTypeRegistry(),
+		Defaults: Defaults{Audience: []string{"public", "developer"}},
+	}
+	entry, errs := ParseEntry(content, "fix__body.md", module)
 	if len(errs) > 0 {
 		t.Fatalf("expected no errors, got %v", errs)
 	}
@@ -77,7 +90,7 @@ func TestParseEntryExplicitEmptyAudienceOverridesConfiguredDefault(t *testing.T)
 }
 
 func TestParseEntryFailsForFilenameWithoutTypePrefix(t *testing.T) {
-	_, errs := ParseEntry("Body", "plain.md")
+	_, errs := ParseEntry("Body", "plain.md", defaultTestModule())
 	if len(errs) == 0 {
 		t.Fatalf("expected error")
 	}

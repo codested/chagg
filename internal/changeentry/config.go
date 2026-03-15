@@ -16,14 +16,26 @@ var ConfigFileNames = []string{".chagg.yaml", ".chagg.yml", "chagg.yml"}
 
 const UserConfigEnvVar = "CHAGG_USER_CONFIG"
 
-type ModuleConfig struct {
-	Name            string
-	ChangesDir      string
-	TagPrefix       string
-	DefaultAudience []string
-	GitWrite        GitWritePolicy
+// Defaults holds resolved entry-field defaults for a module.
+// A nil slice means "no default configured at this level".
+// Rank defaults to 0 when not configured.
+type Defaults struct {
+	Audience  []string // applied when an entry omits the audience: field
+	Rank      int      // default rank for new entries
+	Component []string // applied when an entry omits the component: field
 }
 
+// ModuleConfig is the fully resolved configuration for a single changes module.
+type ModuleConfig struct {
+	Name       string
+	ChangesDir string
+	TagPrefix  string
+	Defaults   Defaults
+	Types      TypeRegistry
+	GitWrite   GitWritePolicy
+}
+
+// GitWritePolicy controls which git write operations chagg is allowed to perform.
 type GitWritePolicy struct {
 	Enabled     bool
 	Add         bool
@@ -32,100 +44,132 @@ type GitWritePolicy struct {
 }
 
 func defaultGitWritePolicy() GitWritePolicy {
-	return GitWritePolicy{
-		Enabled:     true,
-		Add:         true,
-		ReleaseTag:  true,
-		ReleasePush: true,
-	}
+	return GitWritePolicy{Enabled: true, Add: true, ReleaseTag: true, ReleasePush: true}
 }
 
-func (p GitWritePolicy) AllowsAdd() bool {
-	return p.Enabled && p.Add
+func (p GitWritePolicy) AllowsAdd() bool         { return p.Enabled && p.Add }
+func (p GitWritePolicy) AllowsReleaseTag() bool  { return p.Enabled && p.ReleaseTag }
+func (p GitWritePolicy) AllowsReleasePush() bool { return p.Enabled && p.ReleasePush }
+
+// ── YAML raw structs ──────────────────────────────────────────────────────────
+
+// rawConfig is the YAML schema shared by both the user config and the repo
+// config.  The Modules field is only meaningful in the repo config.
+type rawConfig struct {
+	Defaults rawDefaults    `yaml:"defaults"`
+	Git      rawGit         `yaml:"git"`
+	Types    []rawTypeEntry `yaml:"types"`
+	Modules  []rawModule    `yaml:"modules"`
 }
 
-func (p GitWritePolicy) AllowsReleaseTag() bool {
-	return p.Enabled && p.ReleaseTag
+type rawModule struct {
+	Name       string         `yaml:"name"`
+	ChangesDir string         `yaml:"changes-dir"`
+	TagPrefix  string         `yaml:"tag-prefix"`
+	Defaults   rawDefaults    `yaml:"defaults"`
+	Types      []rawTypeEntry `yaml:"types"`
 }
 
-func (p GitWritePolicy) AllowsReleasePush() bool {
-	return p.Enabled && p.ReleasePush
+type rawDefaults struct {
+	Audience  stringListConfig `yaml:"audience"`
+	Rank      *int             `yaml:"rank"`
+	Component stringListConfig `yaml:"component"`
 }
 
-type configFile struct {
-	DefaultAudience audienceConfig `yaml:"default-audience"`
-	Modules         []configModule `yaml:"modules"`
+type rawTypeEntry struct {
+	ID          string   `yaml:"id"`
+	Aliases     []string `yaml:"aliases"`
+	Title       string   `yaml:"title"`
+	DefaultBump string   `yaml:"default-bump"`
+	Order       *int     `yaml:"order"`
 }
 
-type configModule struct {
-	Name       string `yaml:"name"`
-	ChangesDir string `yaml:"changes-dir"`
-	TagPrefix  string `yaml:"tag-prefix"`
+type rawGit struct {
+	Write rawGitWrite `yaml:"write"`
 }
 
-type audienceConfig []string
+type rawGitWrite struct {
+	Allow      *bool          `yaml:"allow"`
+	Operations rawGitWriteOps `yaml:"operations"`
+}
 
-func (a *audienceConfig) UnmarshalYAML(node *yaml.Node) error {
+type rawGitWriteOps struct {
+	AddChange        *bool `yaml:"add-change"`
+	CreateReleaseTag *bool `yaml:"create-release-tag"`
+	PushReleaseTag   *bool `yaml:"push-release-tag"`
+}
+
+// stringListConfig is a YAML type that accepts either a scalar string or a
+// sequence of strings, and stays nil when the field is absent.
+type stringListConfig []string
+
+func (s *stringListConfig) UnmarshalYAML(node *yaml.Node) error {
 	switch node.Kind {
 	case yaml.ScalarNode:
-		var value string
-		if err := node.Decode(&value); err != nil {
-			return err
-		}
-		trimmed := strings.TrimSpace(value)
+		trimmed := strings.TrimSpace(node.Value)
 		if trimmed == "" {
-			*a = nil
+			*s = []string{}
 			return nil
 		}
-		*a = []string{trimmed}
+		*s = stringListConfig{trimmed}
 		return nil
 	case yaml.SequenceNode:
 		var values []string
 		if err := node.Decode(&values); err != nil {
 			return err
 		}
-		result := make([]string, 0, len(values))
-		for _, value := range values {
-			trimmed := strings.TrimSpace(value)
-			if trimmed != "" {
-				result = append(result, trimmed)
+		result := make(stringListConfig, 0, len(values))
+		for _, v := range values {
+			if t := strings.TrimSpace(v); t != "" {
+				result = append(result, t)
 			}
 		}
-		*a = result
+		*s = result
 		return nil
 	default:
-		return fmt.Errorf("default-audience must be a string or list")
+		return fmt.Errorf("expected string or sequence, got %v", node.Tag)
 	}
 }
 
-type userConfigFile struct {
-	Git userConfigGit `yaml:"git"`
+// ── Accumulated config state ──────────────────────────────────────────────────
+
+// resolvedLayer accumulates settings as config layers are applied.
+type resolvedLayer struct {
+	types     []TypeDefinition
+	defaults  Defaults
+	gitPolicy GitWritePolicy
 }
 
-type userConfigGit struct {
-	Write userConfigGitWrite `yaml:"write"`
+func newResolvedLayer() resolvedLayer {
+	cp := make([]TypeDefinition, len(builtinTypes))
+	copy(cp, builtinTypes)
+	return resolvedLayer{types: cp, gitPolicy: defaultGitWritePolicy()}
 }
 
-type userConfigGitWrite struct {
-	Allow      *bool                 `yaml:"allow"`
-	Operations userConfigGitWriteOps `yaml:"operations"`
+func (l *resolvedLayer) applyGit(raw rawGitWrite) {
+	l.gitPolicy = applyGitWrite(l.gitPolicy, raw)
 }
 
-type userConfigGitWriteOps struct {
-	AddChange        *bool `yaml:"add-change"`
-	CreateReleaseTag *bool `yaml:"create-release-tag"`
-	PushReleaseTag   *bool `yaml:"push-release-tag"`
+func (l *resolvedLayer) applyDefaults(raw rawDefaults) {
+	l.defaults = mergeDefaults(l.defaults, raw)
 }
 
-// ResolveModuleForChangesDir returns module configuration for the target changes directory.
-// When .chagg.yaml is missing, a sensible single-module default is returned.
-func ResolveModuleForChangesDir(repoRoot string, changesDir string) (ModuleConfig, error) {
-	modules, hasConfig, configName, err := loadModules(repoRoot)
+func (l *resolvedLayer) applyTypes(raw []rawTypeEntry) error {
+	merged, err := mergeTypeList(l.types, raw)
 	if err != nil {
-		return ModuleConfig{}, err
+		return err
 	}
+	l.types = merged
+	return nil
+}
 
-	gitWritePolicy, err := loadUserGitWritePolicy()
+// ── Public resolution API ─────────────────────────────────────────────────────
+
+// ResolveModuleForChangesDir returns the fully resolved ModuleConfig for the
+// target changes directory by merging: code defaults → user config → repo
+// config → module-level config.
+func ResolveModuleForChangesDir(repoRoot string, changesDir string) (ModuleConfig, error) {
+	layer, repoCfg, configName, err := buildBaseLayer(repoRoot)
 	if err != nil {
 		return ModuleConfig{}, err
 	}
@@ -135,45 +179,74 @@ func ResolveModuleForChangesDir(repoRoot string, changesDir string) (ModuleConfi
 		return ModuleConfig{}, err
 	}
 
-	for _, module := range modules {
-		if samePath(module.ChangesDir, absChangesDir) {
-			module.GitWrite = gitWritePolicy
-			return module, nil
+	name, tagPrefix := inferModuleIdentity(repoRoot, absChangesDir)
+
+	if repoCfg != nil {
+		rawMod, findErr := findRawModule(repoRoot, repoCfg.Modules, absChangesDir, configName)
+		if findErr != nil {
+			return ModuleConfig{}, findErr
+		}
+
+		if rawMod != nil {
+			if err := layer.applyTypes(rawMod.Types); err != nil {
+				return ModuleConfig{}, fmt.Errorf("%s module %q types: %w", configName, rawMod.Name, err)
+			}
+			layer.applyDefaults(rawMod.Defaults)
+			if strings.TrimSpace(rawMod.Name) != "" {
+				name = strings.TrimSpace(rawMod.Name)
+			}
+			if strings.TrimSpace(rawMod.TagPrefix) != "" {
+				tagPrefix = strings.TrimSpace(rawMod.TagPrefix)
+			}
+		} else if hasExplicitModules(repoCfg) {
+			return ModuleConfig{}, NewValidationError("config",
+				fmt.Sprintf("no module in %s matches changes directory %s", configName, absChangesDir))
+		} else {
+			// No modules declared: validate auto-inferred names don't collide.
+			discoveredDirs, discoverErr := FindAllChangesDirs(repoRoot)
+			if discoverErr != nil {
+				return ModuleConfig{}, discoverErr
+			}
+			if !containsSamePath(discoveredDirs, absChangesDir) {
+				discoveredDirs = append(discoveredDirs, absChangesDir)
+			}
+			if collisionErr := validateInferredModuleNames(repoRoot, discoveredDirs); collisionErr != nil {
+				return ModuleConfig{}, collisionErr
+			}
+		}
+	} else {
+		// No repo config: validate auto-inferred names don't collide.
+		discoveredDirs, discoverErr := FindAllChangesDirs(repoRoot)
+		if discoverErr != nil {
+			return ModuleConfig{}, discoverErr
+		}
+		if !containsSamePath(discoveredDirs, absChangesDir) {
+			discoveredDirs = append(discoveredDirs, absChangesDir)
+		}
+		if collisionErr := validateInferredModuleNames(repoRoot, discoveredDirs); collisionErr != nil {
+			return ModuleConfig{}, collisionErr
 		}
 	}
 
-	if hasConfig {
-		return ModuleConfig{}, NewValidationError("config", fmt.Sprintf("no module in %s matches changes directory %s", configName, absChangesDir))
-	}
-
-	discoveredDirs, discoverErr := FindAllChangesDirs(repoRoot)
-	if discoverErr != nil {
-		return ModuleConfig{}, discoverErr
-	}
-	if !containsSamePath(discoveredDirs, absChangesDir) {
-		discoveredDirs = append(discoveredDirs, absChangesDir)
-	}
-	if collisionErr := validateInferredModuleNames(repoRoot, discoveredDirs); collisionErr != nil {
-		return ModuleConfig{}, collisionErr
-	}
-
-	module := defaultModuleForChangesDir(repoRoot, absChangesDir)
-	module.GitWrite = gitWritePolicy
-	return module, nil
+	return ModuleConfig{
+		Name:       name,
+		ChangesDir: absChangesDir,
+		TagPrefix:  tagPrefix,
+		Defaults:   layer.defaults,
+		Types:      buildTypeRegistry(layer.types),
+		GitWrite:   layer.gitPolicy,
+	}, nil
 }
 
-// ResolveModulesForChangesDirs maps every discovered changes directory to a module.
-// If .chagg.yaml exists, each directory must be explicitly configured.
+// ResolveModulesForChangesDirs maps every discovered changes directory to a
+// fully resolved ModuleConfig.
 func ResolveModulesForChangesDirs(repoRoot string, changesDirs []string) (map[string]ModuleConfig, error) {
-	modules, hasConfig, configName, err := loadModules(repoRoot)
+	layer, repoCfg, configName, err := buildBaseLayer(repoRoot)
 	if err != nil {
 		return nil, err
 	}
 
-	gitWritePolicy, err := loadUserGitWritePolicy()
-	if err != nil {
-		return nil, err
-	}
+	hasConfig := repoCfg != nil && hasExplicitModules(repoCfg)
 
 	result := make(map[string]ModuleConfig, len(changesDirs))
 	for _, changesDir := range changesDirs {
@@ -182,27 +255,42 @@ func ResolveModulesForChangesDirs(repoRoot string, changesDirs []string) (map[st
 			return nil, absErr
 		}
 
-		matched := false
-		for _, module := range modules {
-			if samePath(module.ChangesDir, absChangesDir) {
-				module.GitWrite = gitWritePolicy
-				result[changesDir] = module
-				matched = true
-				break
+		// Start from the base layer (copy so modules don't bleed into each other).
+		ml := layer
+
+		name, tagPrefix := inferModuleIdentity(repoRoot, absChangesDir)
+
+		if repoCfg != nil {
+			rawMod, findErr := findRawModule(repoRoot, repoCfg.Modules, absChangesDir, configName)
+			if findErr != nil {
+				return nil, findErr
+			}
+
+			if rawMod != nil {
+				if err := ml.applyTypes(rawMod.Types); err != nil {
+					return nil, fmt.Errorf("%s module %q types: %w", configName, rawMod.Name, err)
+				}
+				ml.applyDefaults(rawMod.Defaults)
+				if strings.TrimSpace(rawMod.Name) != "" {
+					name = strings.TrimSpace(rawMod.Name)
+				}
+				if strings.TrimSpace(rawMod.TagPrefix) != "" {
+					tagPrefix = strings.TrimSpace(rawMod.TagPrefix)
+				}
+			} else if hasConfig {
+				return nil, NewValidationError("config",
+					fmt.Sprintf("changes directory %s is not declared in %s", absChangesDir, configName))
 			}
 		}
 
-		if matched {
-			continue
+		result[changesDir] = ModuleConfig{
+			Name:       name,
+			ChangesDir: absChangesDir,
+			TagPrefix:  tagPrefix,
+			Defaults:   ml.defaults,
+			Types:      buildTypeRegistry(ml.types),
+			GitWrite:   ml.gitPolicy,
 		}
-
-		if hasConfig {
-			return nil, NewValidationError("config", fmt.Sprintf("changes directory %s is not declared in %s", absChangesDir, configName))
-		}
-
-		module := defaultModuleForChangesDir(repoRoot, absChangesDir)
-		module.GitWrite = gitWritePolicy
-		result[changesDir] = module
 	}
 
 	if !hasConfig {
@@ -214,71 +302,83 @@ func ResolveModulesForChangesDirs(repoRoot string, changesDirs []string) (map[st
 	return result, nil
 }
 
-func loadModules(repoRoot string) ([]ModuleConfig, bool, string, error) {
-	configPath, hasConfig, err := resolveConfigPath(repoRoot)
+// ── Layer construction ────────────────────────────────────────────────────────
+
+// buildBaseLayer creates the accumulated config from code defaults → user
+// config → repo root config, returning the layer and the raw repo config
+// (nil when absent) for subsequent module-level processing.
+func buildBaseLayer(repoRoot string) (resolvedLayer, *rawConfig, string, error) {
+	layer := newResolvedLayer()
+
+	// User config.
+	userRaw, err := loadRawUserConfig()
 	if err != nil {
-		return nil, false, "", err
+		return resolvedLayer{}, nil, "", err
+	}
+	if userRaw != nil {
+		layer.applyGit(userRaw.Git.Write)
+		layer.applyDefaults(userRaw.Defaults)
+		if err := layer.applyTypes(userRaw.Types); err != nil {
+			return resolvedLayer{}, nil, "", fmt.Errorf("user config types: %w", err)
+		}
+	}
+
+	// Repo config.
+	repoCfg, configName, err := loadRawRepoConfig(repoRoot)
+	if err != nil {
+		return resolvedLayer{}, nil, "", err
+	}
+	if repoCfg != nil {
+		layer.applyGit(repoCfg.Git.Write)
+		layer.applyDefaults(repoCfg.Defaults)
+		if err := layer.applyTypes(repoCfg.Types); err != nil {
+			return resolvedLayer{}, nil, "", fmt.Errorf("%s types: %w", configName, err)
+		}
+	}
+
+	return layer, repoCfg, configName, nil
+}
+
+// ── Raw config loaders ────────────────────────────────────────────────────────
+
+func loadRawUserConfig() (*rawConfig, error) {
+	path, hasConfig, err := resolveUserConfigPath()
+	if err != nil {
+		return nil, err
 	}
 	if !hasConfig {
-		return nil, false, "", nil
+		return nil, nil
 	}
+	return loadRawConfig(path, "user config")
+}
 
-	content, err := os.ReadFile(configPath)
+func loadRawRepoConfig(repoRoot string) (*rawConfig, string, error) {
+	configPath, hasConfig, err := resolveConfigPath(repoRoot)
 	if err != nil {
-		return nil, false, "", err
+		return nil, "", err
+	}
+	if !hasConfig {
+		return nil, "", nil
 	}
 
-	var file configFile
-	if err := yaml.Unmarshal(content, &file); err != nil {
-		return nil, true, filepath.Base(configPath), NewValidationError("config", fmt.Sprintf("invalid %s: %s", filepath.Base(configPath), err))
+	configName := filepath.Base(configPath)
+	cfg, err := loadRawConfig(configPath, configName)
+	if err != nil {
+		return nil, configName, err
 	}
+	return cfg, configName, nil
+}
 
-	defaultAudience := normalizeAudience([]string(file.DefaultAudience))
-
-	modules := make([]ModuleConfig, 0, len(file.Modules))
-	seenNames := map[string]bool{}
-	seenDirs := map[string]bool{}
-
-	for index, module := range file.Modules {
-		changesDirRaw := strings.TrimSpace(module.ChangesDir)
-		if changesDirRaw == "" {
-			return nil, true, filepath.Base(configPath), NewValidationError("config", fmt.Sprintf("modules[%d].changes-dir is required", index))
-		}
-
-		cleanChangesDir := filepath.Clean(changesDirRaw)
-		if filepath.IsAbs(cleanChangesDir) {
-			return nil, true, filepath.Base(configPath), NewValidationError("config", fmt.Sprintf("modules[%d].changes-dir must be relative", index))
-		}
-
-		changesDirPath := filepath.Join(repoRoot, cleanChangesDir)
-		if seenDirs[strings.ToLower(changesDirPath)] {
-			return nil, true, filepath.Base(configPath), NewValidationError("config", fmt.Sprintf("duplicate module changes-dir %q", changesDirRaw))
-		}
-
-		inferredName, inferredTagPrefix := inferModuleIdentity(repoRoot, changesDirPath)
-		name := strings.TrimSpace(module.Name)
-		if name == "" {
-			name = inferredName
-		}
-		if seenNames[strings.ToLower(name)] {
-			return nil, true, filepath.Base(configPath), NewValidationError("config", fmt.Sprintf("duplicate module name %q", name))
-		}
-
-		tagPrefix := strings.TrimSpace(module.TagPrefix)
-		if tagPrefix == "" {
-			tagPrefix = inferredTagPrefix
-		}
-		modules = append(modules, ModuleConfig{
-			Name:            name,
-			ChangesDir:      changesDirPath,
-			TagPrefix:       tagPrefix,
-			DefaultAudience: defaultAudience,
-		})
-		seenNames[strings.ToLower(name)] = true
-		seenDirs[strings.ToLower(changesDirPath)] = true
+func loadRawConfig(path, label string) (*rawConfig, error) {
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
 	}
-
-	return modules, true, filepath.Base(configPath), nil
+	var cfg rawConfig
+	if err := yaml.Unmarshal(content, &cfg); err != nil {
+		return nil, NewValidationError("config", fmt.Sprintf("invalid %s: %s", label, err))
+	}
+	return &cfg, nil
 }
 
 func resolveConfigPath(repoRoot string) (string, bool, error) {
@@ -287,49 +387,23 @@ func resolveConfigPath(repoRoot string) (string, bool, error) {
 		path := filepath.Join(repoRoot, name)
 		if _, err := os.Stat(path); err == nil {
 			found = append(found, path)
-			continue
 		} else if !errors.Is(err, os.ErrNotExist) {
 			return "", false, err
 		}
 	}
-
 	if len(found) == 0 {
 		return "", false, nil
 	}
-
 	if len(found) > 1 {
 		names := make([]string, 0, len(found))
-		for _, path := range found {
-			names = append(names, filepath.Base(path))
+		for _, p := range found {
+			names = append(names, filepath.Base(p))
 		}
-		return "", false, NewValidationError("config", fmt.Sprintf("multiple config files found (%s); keep only one of %s", strings.Join(names, ", "), strings.Join(ConfigFileNames, ", ")))
+		return "", false, NewValidationError("config",
+			fmt.Sprintf("multiple config files found (%s); keep only one of %s",
+				strings.Join(names, ", "), strings.Join(ConfigFileNames, ", ")))
 	}
-
 	return found[0], true, nil
-}
-
-func loadUserGitWritePolicy() (GitWritePolicy, error) {
-	policy := defaultGitWritePolicy()
-
-	path, hasConfig, err := resolveUserConfigPath()
-	if err != nil {
-		return GitWritePolicy{}, err
-	}
-	if !hasConfig {
-		return policy, nil
-	}
-
-	content, err := os.ReadFile(path)
-	if err != nil {
-		return GitWritePolicy{}, err
-	}
-
-	var cfg userConfigFile
-	if err := yaml.Unmarshal(content, &cfg); err != nil {
-		return GitWritePolicy{}, NewValidationError("config", fmt.Sprintf("invalid user config %s: %s", path, err))
-	}
-
-	return applyUserGitWriteConfig(policy, cfg.Git.Write), nil
 }
 
 func resolveUserConfigPath() (string, bool, error) {
@@ -364,60 +438,196 @@ func resolveUserConfigPath() (string, bool, error) {
 	}
 }
 
-func applyUserGitWriteConfig(base GitWritePolicy, cfg userConfigGitWrite) GitWritePolicy {
+// ── Merge helpers ─────────────────────────────────────────────────────────────
+
+func mergeDefaults(base Defaults, raw rawDefaults) Defaults {
 	result := base
-
-	if cfg.Allow != nil {
-		result.Enabled = *cfg.Allow
-		result.Add = *cfg.Allow
-		result.ReleaseTag = *cfg.Allow
-		result.ReleasePush = *cfg.Allow
+	if raw.Audience != nil {
+		result.Audience = normalizeStringList([]string(raw.Audience))
 	}
-
-	if cfg.Operations.AddChange != nil {
-		result.Add = *cfg.Operations.AddChange
+	if raw.Rank != nil {
+		result.Rank = *raw.Rank
 	}
-	if cfg.Operations.CreateReleaseTag != nil {
-		result.ReleaseTag = *cfg.Operations.CreateReleaseTag
+	if raw.Component != nil {
+		result.Component = normalizeStringList([]string(raw.Component))
 	}
-	if cfg.Operations.PushReleaseTag != nil {
-		result.ReleasePush = *cfg.Operations.PushReleaseTag
-	}
-
 	return result
 }
 
-func defaultModuleForChangesDir(repoRoot string, changesDir string) ModuleConfig {
-	name, tagPrefix := inferModuleIdentity(repoRoot, changesDir)
+// mergeTypeList applies rawTypeEntry overrides onto an existing type list.
+// Entries whose ID matches an existing type perform a partial update;
+// entries with a new ID are appended.  Duplicate IDs within the overrides
+// list, or aliases that conflict with another type's ID or aliases, are
+// rejected.
+func mergeTypeList(base []TypeDefinition, overrides []rawTypeEntry) ([]TypeDefinition, error) {
+	result := make([]TypeDefinition, len(base))
+	copy(result, base)
 
-	return ModuleConfig{
-		Name:            name,
-		ChangesDir:      changesDir,
-		TagPrefix:       tagPrefix,
-		DefaultAudience: nil,
-		GitWrite:        defaultGitWritePolicy(),
-	}
-}
-
-func normalizeAudience(values []string) []string {
-	if len(values) == 0 {
-		return nil
+	idxByID := make(map[ChangeType]int, len(result))
+	for i, d := range result {
+		idxByID[d.ID] = i
 	}
 
-	result := make([]string, 0, len(values))
-	for _, value := range values {
-		trimmed := strings.TrimSpace(value)
-		if trimmed != "" {
-			result = append(result, trimmed)
+	seenOverrideIDs := make(map[ChangeType]bool, len(overrides))
+
+	for _, ov := range overrides {
+		id := ChangeType(strings.ToLower(strings.TrimSpace(ov.ID)))
+		if id == "" {
+			return nil, NewValidationError("config", "type entry is missing required 'id' field")
+		}
+		if seenOverrideIDs[id] {
+			return nil, NewValidationError("config", fmt.Sprintf("duplicate type id %q in config", id))
+		}
+		seenOverrideIDs[id] = true
+
+		if idx, exists := idxByID[id]; exists {
+			// Partial override of an existing type.
+			if len(ov.Aliases) > 0 {
+				result[idx].Aliases = normalizeAliases(ov.Aliases)
+			}
+			if ov.Title != "" {
+				result[idx].Title = ov.Title
+			}
+			if ov.DefaultBump != "" {
+				bump, err := NormalizeBumpLevel(ov.DefaultBump)
+				if err != nil {
+					return nil, fmt.Errorf("type %q default-bump: %w", id, err)
+				}
+				result[idx].DefaultBump = bump
+			}
+			if ov.Order != nil {
+				result[idx].Order = *ov.Order
+			}
+		} else {
+			// New type.
+			bump := BumpLevelPatch
+			if ov.DefaultBump != "" {
+				var err error
+				bump, err = NormalizeBumpLevel(ov.DefaultBump)
+				if err != nil {
+					return nil, fmt.Errorf("type %q default-bump: %w", id, err)
+				}
+			}
+			order := len(result) // default: append after existing
+			if ov.Order != nil {
+				order = *ov.Order
+			}
+			title := ov.Title
+			if title == "" {
+				title = capitalizeFirst(string(id))
+			}
+			result = append(result, TypeDefinition{
+				ID:          id,
+				Aliases:     normalizeAliases(ov.Aliases),
+				Title:       title,
+				DefaultBump: bump,
+				Order:       order,
+			})
+			idxByID[id] = len(result) - 1
 		}
 	}
 
-	if len(result) == 0 {
-		return nil
+	// Validate that no two types share an alias.
+	if err := validateTypeAliasConflicts(result); err != nil {
+		return nil, err
 	}
 
+	return result, nil
+}
+
+func validateTypeAliasConflicts(defs []TypeDefinition) error {
+	seen := make(map[string]ChangeType, len(defs)*3)
+	for _, d := range defs {
+		key := strings.ToLower(string(d.ID))
+		if other, exists := seen[key]; exists && other != d.ID {
+			return NewValidationError("config",
+				fmt.Sprintf("type alias %q is claimed by both %q and %q", key, other, d.ID))
+		}
+		seen[key] = d.ID
+
+		for _, a := range d.Aliases {
+			lower := strings.ToLower(a)
+			if other, exists := seen[lower]; exists && other != d.ID {
+				return NewValidationError("config",
+					fmt.Sprintf("type alias %q is claimed by both %q and %q", lower, other, d.ID))
+			}
+			seen[lower] = d.ID
+		}
+	}
+	return nil
+}
+
+func applyGitWrite(base GitWritePolicy, raw rawGitWrite) GitWritePolicy {
+	result := base
+	if raw.Allow != nil {
+		result.Enabled = *raw.Allow
+		result.Add = *raw.Allow
+		result.ReleaseTag = *raw.Allow
+		result.ReleasePush = *raw.Allow
+	}
+	if raw.Operations.AddChange != nil {
+		result.Add = *raw.Operations.AddChange
+	}
+	if raw.Operations.CreateReleaseTag != nil {
+		result.ReleaseTag = *raw.Operations.CreateReleaseTag
+	}
+	if raw.Operations.PushReleaseTag != nil {
+		result.ReleasePush = *raw.Operations.PushReleaseTag
+	}
 	return result
 }
+
+// ── Module lookup helpers ─────────────────────────────────────────────────────
+
+// findRawModule locates the rawModule entry matching absChangesDir.
+// Returns nil (no error) when the modules list is empty (unconfigured repo).
+func findRawModule(repoRoot string, modules []rawModule, absChangesDir string, configName string) (*rawModule, error) {
+	seenNames := map[string]bool{}
+	seenDirs := map[string]bool{}
+
+	for i, m := range modules {
+		changesDirRaw := strings.TrimSpace(m.ChangesDir)
+		if changesDirRaw == "" {
+			return nil, NewValidationError("config",
+				fmt.Sprintf("modules[%d].changes-dir is required", i))
+		}
+		clean := filepath.Clean(changesDirRaw)
+		if filepath.IsAbs(clean) {
+			return nil, NewValidationError("config",
+				fmt.Sprintf("modules[%d].changes-dir must be relative", i))
+		}
+		resolved := filepath.Join(repoRoot, clean)
+		lowerResolved := strings.ToLower(resolved)
+		if seenDirs[lowerResolved] {
+			return nil, NewValidationError("config",
+				fmt.Sprintf("duplicate module changes-dir %q", changesDirRaw))
+		}
+		seenDirs[lowerResolved] = true
+
+		inferredName, _ := inferModuleIdentity(repoRoot, resolved)
+		name := strings.TrimSpace(m.Name)
+		if name == "" {
+			name = inferredName
+		}
+		if seenNames[strings.ToLower(name)] {
+			return nil, NewValidationError("config",
+				fmt.Sprintf("duplicate module name %q", name))
+		}
+		seenNames[strings.ToLower(name)] = true
+
+		if samePath(resolved, absChangesDir) {
+			cp := modules[i]
+			return &cp, nil
+		}
+	}
+	return nil, nil
+}
+
+func hasExplicitModules(cfg *rawConfig) bool {
+	return cfg != nil && len(cfg.Modules) > 0
+}
+
+// ── Path / identity utilities ─────────────────────────────────────────────────
 
 func inferModuleIdentity(repoRoot, changesDir string) (string, string) {
 	rootChangesDir := filepath.Join(repoRoot, ".changes")
@@ -433,7 +643,6 @@ func inferModuleIdentity(repoRoot, changesDir string) (string, string) {
 	if parent == "" || parent == "." || parent == string(filepath.Separator) {
 		parent = "default"
 	}
-
 	return parent, parent + "-"
 }
 
@@ -444,7 +653,6 @@ func validateInferredModuleNames(repoRoot string, changesDirs []string) error {
 		if err != nil {
 			return err
 		}
-
 		name, _ := inferModuleIdentity(repoRoot, absChangesDir)
 		key := strings.ToLower(name)
 		namesToDirs[key] = append(namesToDirs[key], absChangesDir)
@@ -455,20 +663,16 @@ func validateInferredModuleNames(repoRoot string, changesDirs []string) error {
 		if len(dirs) <= 1 {
 			continue
 		}
-
 		sort.Strings(dirs)
 		collisions = append(collisions, fmt.Sprintf("%s (%s)", key, strings.Join(dirs, ", ")))
 	}
-
 	if len(collisions) == 0 {
 		return nil
 	}
-
 	sort.Strings(collisions)
-	return NewValidationError(
-		"config",
-		fmt.Sprintf("inferred module name collision detected: %s. Define explicit modules in config with unique names/tag-prefixes", strings.Join(collisions, "; ")),
-	)
+	return NewValidationError("config",
+		fmt.Sprintf("inferred module name collision detected: %s. Define explicit modules in config with unique names/tag-prefixes",
+			strings.Join(collisions, "; ")))
 }
 
 func containsSamePath(paths []string, target string) bool {
@@ -477,12 +681,44 @@ func containsSamePath(paths []string, target string) bool {
 			return true
 		}
 	}
-
 	return false
 }
 
-func samePath(a string, b string) bool {
-	cleanA := filepath.Clean(a)
-	cleanB := filepath.Clean(b)
-	return strings.EqualFold(cleanA, cleanB)
+func samePath(a, b string) bool {
+	return strings.EqualFold(filepath.Clean(a), filepath.Clean(b))
+}
+
+// ── String utilities ──────────────────────────────────────────────────────────
+
+func normalizeStringList(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	result := make([]string, 0, len(values))
+	for _, v := range values {
+		if t := strings.TrimSpace(v); t != "" {
+			result = append(result, t)
+		}
+	}
+	if len(result) == 0 {
+		return nil
+	}
+	return result
+}
+
+func normalizeAliases(aliases []string) []string {
+	result := make([]string, 0, len(aliases))
+	for _, a := range aliases {
+		if t := strings.ToLower(strings.TrimSpace(a)); t != "" {
+			result = append(result, t)
+		}
+	}
+	return result
+}
+
+func capitalizeFirst(s string) string {
+	if s == "" {
+		return s
+	}
+	return strings.ToUpper(s[:1]) + s[1:]
 }

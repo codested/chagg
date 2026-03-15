@@ -102,7 +102,7 @@ func CheckChangesDir(changesDir string, module ModuleConfig) ([]CheckResult, err
 			return nil
 		}
 
-		_, errs := ParseEntryWithDefaults(string(contentBytes), path, module.DefaultAudience)
+		_, errs := ParseEntry(string(contentBytes), path, module)
 		results = append(results, CheckResult{Path: path, Errors: errs})
 		return nil
 	})

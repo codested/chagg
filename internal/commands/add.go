@@ -19,7 +19,7 @@ func AddCommand() *cli.Command {
 		Usage:     "Create a new change entry",
 		ArgsUsage: "[path]",
 		Flags: []cli.Flag{
-			&cli.StringFlag{Name: "type", Usage: changeentry.TypeFlagUsage()},
+			&cli.StringFlag{Name: "type", Usage: changeentry.DefaultTypeRegistry().TypeFlagUsage()},
 			&cli.StringFlag{Name: "bump", Usage: changeentry.BumpFlagUsage()},
 			&cli.StringFlag{Name: "component", Usage: "Component(s), comma separated"},
 			&cli.StringFlag{Name: "audience", Usage: "Audience(s), comma separated"},
@@ -69,27 +69,27 @@ func addAction(_ context.Context, cmd *cli.Command) error {
 	}
 
 	params := changeentry.Params{
-		Type:            cmd.String("type"),
-		TypeSet:         cmd.IsSet("type"),
-		Bump:            cmd.String("bump"),
-		BumpSet:         cmd.IsSet("bump"),
-		Component:       cmd.String("component"),
-		ComponentSet:    cmd.IsSet("component"),
-		Audience:        cmd.String("audience"),
-		AudienceSet:     cmd.IsSet("audience"),
-		Rank:            cmd.Int("rank"),
-		RankSet:         cmd.IsSet("rank"),
-		Issue:           cmd.String("issue"),
-		IssueSet:        cmd.IsSet("issue"),
-		Release:         cmd.String("release"),
-		ReleaseSet:      cmd.IsSet("release"),
-		Body:            cmd.String("body"),
-		BodySet:         cmd.IsSet("body"),
-		DefaultAudience: module.DefaultAudience,
+		Type:         cmd.String("type"),
+		TypeSet:      cmd.IsSet("type"),
+		Bump:         cmd.String("bump"),
+		BumpSet:      cmd.IsSet("bump"),
+		Component:    cmd.String("component"),
+		ComponentSet: cmd.IsSet("component"),
+		Audience:     cmd.String("audience"),
+		AudienceSet:  cmd.IsSet("audience"),
+		Rank:         cmd.Int("rank"),
+		RankSet:      cmd.IsSet("rank"),
+		Issue:        cmd.String("issue"),
+		IssueSet:     cmd.IsSet("issue"),
+		Release:      cmd.String("release"),
+		ReleaseSet:   cmd.IsSet("release"),
+		Body:         cmd.String("body"),
+		BodySet:      cmd.IsSet("body"),
+		Defaults:     module.Defaults,
 	}
 
 	interactive := isInteractiveStdin() && !cmd.Bool("no-prompt")
-	path, err := changeentry.CreateChange(changesDir, cmd.Args().Get(0), params, os.Stdin, os.Stdout, interactive)
+	path, err := changeentry.CreateChange(module, cmd.Args().Get(0), params, os.Stdin, os.Stdout, interactive)
 	if err != nil {
 		return err
 	}

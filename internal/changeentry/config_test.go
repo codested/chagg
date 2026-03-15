@@ -126,7 +126,7 @@ func TestResolveModuleForChangesDirReadsDefaultAudienceString(t *testing.T) {
 		t.Fatalf("mkdir .git: %v", err)
 	}
 
-	config := "default-audience: public\nmodules:\n  - changes-dir: .changes\n"
+	config := "defaults:\n  audience: public\nmodules:\n  - changes-dir: .changes\n"
 	if err := os.WriteFile(filepath.Join(repoDir, ".chagg.yaml"), []byte(config), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
@@ -136,8 +136,8 @@ func TestResolveModuleForChangesDirReadsDefaultAudienceString(t *testing.T) {
 		t.Fatalf("ResolveModuleForChangesDir returned error: %v", err)
 	}
 
-	if len(module.DefaultAudience) != 1 || module.DefaultAudience[0] != "public" {
-		t.Fatalf("expected default audience [public], got %#v", module.DefaultAudience)
+	if len(module.Defaults.Audience) != 1 || module.Defaults.Audience[0] != "public" {
+		t.Fatalf("expected default audience [public], got %#v", module.Defaults.Audience)
 	}
 }
 
@@ -153,7 +153,7 @@ func TestResolveModuleForChangesDirReadsDefaultAudienceList(t *testing.T) {
 		t.Fatalf("mkdir .git: %v", err)
 	}
 
-	config := "default-audience:\n  - public\n  - developer\nmodules:\n  - changes-dir: .changes\n"
+	config := "defaults:\n  audience:\n    - public\n    - developer\nmodules:\n  - changes-dir: .changes\n"
 	if err := os.WriteFile(filepath.Join(repoDir, ".chagg.yaml"), []byte(config), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
@@ -163,8 +163,8 @@ func TestResolveModuleForChangesDirReadsDefaultAudienceList(t *testing.T) {
 		t.Fatalf("ResolveModuleForChangesDir returned error: %v", err)
 	}
 
-	if len(module.DefaultAudience) != 2 || module.DefaultAudience[0] != "public" || module.DefaultAudience[1] != "developer" {
-		t.Fatalf("expected default audience [public developer], got %#v", module.DefaultAudience)
+	if len(module.Defaults.Audience) != 2 || module.Defaults.Audience[0] != "public" || module.Defaults.Audience[1] != "developer" {
+		t.Fatalf("expected default audience [public developer], got %#v", module.Defaults.Audience)
 	}
 }
 
