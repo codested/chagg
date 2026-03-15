@@ -64,6 +64,18 @@ func TestParseEntryAppliesConfiguredDefaultAudienceWhenMissing(t *testing.T) {
 	}
 }
 
+func TestParseEntryExplicitEmptyAudienceOverridesConfiguredDefault(t *testing.T) {
+	content := "---\naudience: []\n---\n\nBody"
+	entry, errs := ParseEntryWithDefaults(content, "fix__body.md", []string{"public", "developer"})
+	if len(errs) > 0 {
+		t.Fatalf("expected no errors, got %v", errs)
+	}
+
+	if len(entry.Audience) != 0 {
+		t.Fatalf("expected explicit empty audience to stay empty, got %#v", entry.Audience)
+	}
+}
+
 func TestParseEntryFailsForFilenameWithoutTypePrefix(t *testing.T) {
 	_, errs := ParseEntry("Body", "plain.md")
 	if len(errs) == 0 {

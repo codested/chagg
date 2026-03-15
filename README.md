@@ -152,7 +152,7 @@ Creates a new entry file below `.changes`.
 - Missing directories are created automatically.
 - Supports flags for all entry properties (`--type`, `--breaking`, `--component`, `--audience`, `--rank`, `--issue`,
   `--release`, `--body`).
-- `--rank` controls ordering in changelog output (higher values first). `--priority` remains as an alias.
+- `--rank` controls ordering in changelog output (higher values first).
 - By default, new files are staged automatically (`git add`) after creation (built-in default).
 - Use `--no-git-add` to skip staging, or `--git-add` to force staging explicitly.
 - If the target filename already starts with a type prefix (for example `feat__login`), `--type` is optional.

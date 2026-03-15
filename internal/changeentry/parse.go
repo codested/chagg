@@ -10,17 +10,21 @@ import (
 
 // frontMatter holds the raw YAML fields from a change entry file header.
 type frontMatter struct {
-	Breaking  bool         `yaml:"breaking"`
-	Component stringOrList `yaml:"component"`
-	Audience  stringOrList `yaml:"audience"`
-	Rank      int          `yaml:"rank"`
-	Priority  int          `yaml:"priority"`
-	Issue     stringOrList `yaml:"issue"`
-	Release   string       `yaml:"release"`
+	Breaking  bool                 `yaml:"breaking"`
+	Component stringOrList         `yaml:"component"`
+	Audience  optionalStringOrList `yaml:"audience"`
+	Rank      int                  `yaml:"rank"`
+	Issue     stringOrList         `yaml:"issue"`
+	Release   string               `yaml:"release"`
 }
 
 // stringOrList is a YAML type that accepts either a scalar string or a sequence of strings.
 type stringOrList []string
+
+type optionalStringOrList struct {
+	Values []string
+	IsSet  bool
+}
 
 func (s *stringOrList) UnmarshalYAML(value *yaml.Node) error {
 	switch value.Kind {
@@ -49,6 +53,16 @@ func (s *stringOrList) UnmarshalYAML(value *yaml.Node) error {
 	default:
 		return fmt.Errorf("expected string or sequence, got %v", value.Tag)
 	}
+}
+
+func (s *optionalStringOrList) UnmarshalYAML(value *yaml.Node) error {
+	s.IsSet = true
+	var parsed stringOrList
+	if err := (&parsed).UnmarshalYAML(value); err != nil {
+		return err
+	}
+	s.Values = []string(parsed)
+	return nil
 }
 
 type frontMatterParts struct {
@@ -132,14 +146,9 @@ func ParseEntryWithDefaults(content string, path string, defaultAudience []strin
 		}
 	}
 
-	audience := []string(fm.Audience)
-	if len(audience) == 0 {
+	audience := append([]string(nil), fm.Audience.Values...)
+	if !fm.Audience.IsSet {
 		audience = append([]string(nil), defaultAudience...)
-	}
-
-	rank := fm.Rank
-	if rank == 0 {
-		rank = fm.Priority
 	}
 
 	return Entry{
@@ -147,7 +156,7 @@ func ParseEntryWithDefaults(content string, path string, defaultAudience []strin
 		Breaking:  fm.Breaking,
 		Component: fm.Component,
 		Audience:  audience,
-		Priority:  rank,
+		Priority:  fm.Rank,
 		Issue:     fm.Issue,
 		Release:   strings.TrimSpace(fm.Release),
 		Body:      strings.TrimSpace(parts.body),
