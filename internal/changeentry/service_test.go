@@ -126,8 +126,8 @@ func TestRenderEntryOmitsDefaultFields(t *testing.T) {
 		t.Fatalf("RenderEntry returned error: %v", err)
 	}
 
-	if strings.Contains(rendered, "breaking:") {
-		t.Fatalf("expected default breaking to be omitted, got:\n%s", rendered)
+	if strings.Contains(rendered, "bump:") {
+		t.Fatalf("expected default bump to be omitted, got:\n%s", rendered)
 	}
 
 	if strings.Contains(rendered, "audience:") {
@@ -142,7 +142,7 @@ func TestRenderEntryOmitsDefaultFields(t *testing.T) {
 func TestRenderEntryIncludesNonDefaultFields(t *testing.T) {
 	entry := Entry{
 		Type:     ChangeTypeFix,
-		Breaking: true,
+		Bump:     BumpLevelMajor,
 		Audience: []string{"internal"},
 		Priority: 10,
 		Body:     "Fix.",
@@ -153,8 +153,8 @@ func TestRenderEntryIncludesNonDefaultFields(t *testing.T) {
 		t.Fatalf("RenderEntry returned error: %v", err)
 	}
 
-	if !strings.Contains(rendered, "breaking: true") {
-		t.Fatalf("expected non-default breaking to be included, got:\n%s", rendered)
+	if !strings.Contains(rendered, "bump: major") {
+		t.Fatalf("expected non-default bump to be included, got:\n%s", rendered)
 	}
 
 	if !strings.Contains(rendered, "audience: internal") {
@@ -168,9 +168,9 @@ func TestRenderEntryIncludesNonDefaultFields(t *testing.T) {
 
 func TestRenderEntryKeepsBlankLineBetweenHeaderAndBody(t *testing.T) {
 	entry := Entry{
-		Type:     ChangeTypeDocs,
-		Breaking: true,
-		Body:     "Document usage.",
+		Type: ChangeTypeDocs,
+		Bump: BumpLevelMajor,
+		Body: "Document usage.",
 	}
 
 	rendered, err := RenderEntry(entry)
@@ -185,9 +185,9 @@ func TestRenderEntryKeepsBlankLineBetweenHeaderAndBody(t *testing.T) {
 
 func TestRenderEntryPlacesClosingDelimiterOnSeparateLine(t *testing.T) {
 	entry := Entry{
-		Type:     ChangeTypeFix,
-		Breaking: true,
-		Body:     "Body line",
+		Type: ChangeTypeFix,
+		Bump: BumpLevelMajor,
+		Body: "Body line",
 	}
 
 	rendered, err := RenderEntry(entry)
@@ -195,7 +195,7 @@ func TestRenderEntryPlacesClosingDelimiterOnSeparateLine(t *testing.T) {
 		t.Fatalf("RenderEntry returned error: %v", err)
 	}
 
-	if strings.Contains(rendered, "breaking: true---") {
+	if strings.Contains(rendered, "bump: major---") {
 		t.Fatalf("expected closing delimiter not to be concatenated with header fields, got:\n%s", rendered)
 	}
 

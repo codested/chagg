@@ -20,7 +20,7 @@ func AddCommand() *cli.Command {
 		ArgsUsage: "[path]",
 		Flags: []cli.Flag{
 			&cli.StringFlag{Name: "type", Usage: changeentry.TypeFlagUsage()},
-			&cli.BoolFlag{Name: "breaking", Usage: "Mark this entry as breaking"},
+			&cli.StringFlag{Name: "bump", Usage: changeentry.BumpFlagUsage()},
 			&cli.StringFlag{Name: "component", Usage: "Component(s), comma separated"},
 			&cli.StringFlag{Name: "audience", Usage: "Audience(s), comma separated"},
 			&cli.IntFlag{Name: "rank", Usage: "Higher rank values are shown first in changelog output"},
@@ -67,8 +67,8 @@ func addAction(_ context.Context, cmd *cli.Command) error {
 	params := changeentry.Params{
 		Type:            cmd.String("type"),
 		TypeSet:         cmd.IsSet("type"),
-		Breaking:        cmd.Bool("breaking"),
-		BreakingSet:     cmd.IsSet("breaking"),
+		Bump:            cmd.String("bump"),
+		BumpSet:         cmd.IsSet("bump"),
 		Component:       cmd.String("component"),
 		ComponentSet:    cmd.IsSet("component"),
 		Audience:        cmd.String("audience"),

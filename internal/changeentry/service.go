@@ -13,7 +13,7 @@ import (
 
 type Entry struct {
 	Type      ChangeType
-	Breaking  bool
+	Bump      BumpLevel
 	Component []string
 	Audience  []string
 	Priority  int
@@ -25,8 +25,8 @@ type Entry struct {
 type Params struct {
 	Type            string
 	TypeSet         bool
-	Breaking        bool
-	BreakingSet     bool
+	Bump            string
+	BumpSet         bool
 	Component       string
 	ComponentSet    bool
 	Audience        string
@@ -196,7 +196,7 @@ func BuildChangeFilePath(changesDir string, targetArg string) (string, error) {
 
 func collectEntry(params Params, inferredType ChangeType, reader *bufio.Reader, output io.Writer, interactive bool) (Entry, error) {
 
-	breaking, err := resolveBreaking(params, reader, output, interactive)
+	bump, err := resolveBump(params, reader, output, interactive)
 	if err != nil {
 		return Entry{}, err
 	}
@@ -233,7 +233,7 @@ func collectEntry(params Params, inferredType ChangeType, reader *bufio.Reader, 
 
 	return Entry{
 		Type:      inferredType,
-		Breaking:  breaking,
+		Bump:      bump,
 		Component: component,
 		Audience:  audience,
 		Priority:  rank,
@@ -270,16 +270,33 @@ func resolveType(params Params, reader *bufio.Reader, output io.Writer, interact
 	}
 }
 
-func resolveBreaking(params Params, reader *bufio.Reader, output io.Writer, interactive bool) (bool, error) {
-	if params.BreakingSet {
-		return params.Breaking, nil
+func resolveBump(params Params, reader *bufio.Reader, output io.Writer, interactive bool) (BumpLevel, error) {
+	if params.BumpSet {
+		return NormalizeBumpLevel(params.Bump)
 	}
 
 	if !interactive {
-		return false, nil
+		return "", nil
 	}
 
-	return promptBool(reader, output, "Breaking change", false)
+	for {
+		value, err := promptString(reader, output, BumpPrompt(), "")
+		if err != nil {
+			return "", err
+		}
+
+		if strings.TrimSpace(value) == "" {
+			return "", nil
+		}
+
+		level, err := NormalizeBumpLevel(value)
+		if err != nil {
+			_, _ = fmt.Fprintln(output, err)
+			continue
+		}
+
+		return level, nil
+	}
 }
 
 func resolveStringList(flagValue string, isSet bool, reader *bufio.Reader, output io.Writer, interactive bool, label string, defaultValue []string) ([]string, error) {
@@ -396,31 +413,6 @@ func promptString(reader *bufio.Reader, output io.Writer, label string, defaultV
 	}
 
 	return value, nil
-}
-
-func promptBool(reader *bufio.Reader, output io.Writer, label string, defaultValue bool) (bool, error) {
-	defaultText := "y/N"
-	if defaultValue {
-		defaultText = "Y/n"
-	}
-
-	for {
-		value, err := promptString(reader, output, fmt.Sprintf("%s (%s): ", label, defaultText), "")
-		if err != nil {
-			return false, err
-		}
-
-		switch strings.ToLower(strings.TrimSpace(value)) {
-		case "":
-			return defaultValue, nil
-		case "y", "yes", "true", "1":
-			return true, nil
-		case "n", "no", "false", "0":
-			return false, nil
-		default:
-			_, _ = fmt.Fprintln(output, "Please answer with y or n")
-		}
-	}
 }
 
 func parseCSVList(value string) []string {

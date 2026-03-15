@@ -119,7 +119,7 @@ Front matter is optional and only needed for overrides.
 component:
   - api
 audience: public
-breaking: true
+bump: major
 rank: 80
 issue:
   - JIRA-410
@@ -131,7 +131,13 @@ Add OAuth login support.
 
 ### Fields
 
-- `breaking` (optional, default `false`)
+- `bump` (optional): override the default version bump level for this entry (`major`, `minor`, or `patch`). When
+  omitted, the bump level is derived from the change type:
+    - `feature` → `minor`
+    - `fix` → `patch`
+    - `removal` → `minor`
+    - `security` → `patch`
+    - `docs` → `patch`
 - `component` (optional, string or list)
 - `audience` (optional, string or list, defaults to `default-audience` when configured)
 - `rank` (optional, default `0`; higher numbers are shown first)
@@ -141,7 +147,7 @@ Add OAuth login support.
 
 Notes:
 
-- Default values (`breaking: false`, empty audience/default-audience, `rank: 0`) are omitted in newly rendered files.
+- Default values (omitted `bump`, empty audience/default-audience, `rank: 0`) are omitted in newly rendered files.
 - The body is free Markdown. `log` uses the first non-empty line as preview text.
 
 ## Commands
@@ -152,7 +158,7 @@ Creates a new entry file below `.changes`.
 
 - `chagg add auth/token-expiry --type fix` -> `.changes/auth/fix__token-expiry.md`
 - Missing directories are created automatically.
-- Supports flags for all entry properties (`--type`, `--breaking`, `--component`, `--audience`, `--rank`, `--issue`,
+- Supports flags for all entry properties (`--type`, `--bump`, `--component`, `--audience`, `--rank`, `--issue`,
   `--release`, `--body`).
 - `--rank` controls ordering in changelog output (higher values first).
 - By default, new files are staged automatically (`git add`) after creation (built-in default).
@@ -241,10 +247,11 @@ chagg generate -n 0 --no-show-staging
 Creates the next release tag from current staging changes.
 
 - If no staging changes exist, nothing is tagged.
-- If tags already exist, next SemVer is computed from staging entries:
-    - major: any `breaking: true` or `type: removal`
-    - minor: any `type: feature` (when no major)
-    - patch: otherwise
+- If tags already exist, next SemVer is computed from staging entries using per-entry bump levels:
+    - The effective bump level per entry is the `bump` override when set, otherwise the type-based default
+      (`feature`/`removal` → minor, `fix`/`security`/`docs` → patch).
+    - The highest effective bump level across all staging entries is applied.
+    - `bump: major` on any entry triggers a major version bump.
 - If no SemVer tag exists yet, prompts for the initial version (default `0.1.0`).
 - Tag is created **locally only**. `chagg` prints a copy-paste command to push it.
 - `--dry-run`: computes and prints what would happen, but does not create/push tags.

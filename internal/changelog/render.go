@@ -86,13 +86,13 @@ func RenderLog(cl *ChangeLog, baseDir string, previewMaxLen int, w io.Writer) er
 				}
 				preview = truncateLogPreview(preview, previewMaxLen)
 
-				breaking := ""
-				if e.Entry.Breaking {
-					breaking = "  [breaking]"
+				bumpSuffix := ""
+				if e.Entry.Bump != "" {
+					bumpSuffix = "  [bump:" + string(e.Entry.Bump) + "]"
 				}
 
 				fmt.Fprintf(tw, "  [%s]\t%s\t%s%s\n",
-					relPath, string(e.Entry.Type), preview, breaking)
+					relPath, string(e.Entry.Type), preview, bumpSuffix)
 			}
 		}
 
@@ -122,7 +122,7 @@ func RenderJSON(cl *ChangeLog, repoRoot string, w io.Writer) error {
 		ID        string   `json:"id"`
 		Path      string   `json:"path"`
 		Type      string   `json:"type"`
-		Breaking  bool     `json:"breaking"`
+		Bump      string   `json:"bump,omitempty"`
 		Component []string `json:"component,omitempty"`
 		Audience  []string `json:"audience,omitempty"`
 		Rank      int      `json:"rank,omitempty"`
@@ -167,7 +167,7 @@ func RenderJSON(cl *ChangeLog, repoRoot string, w io.Writer) error {
 					ID:        id,
 					Path:      displayPath(repoRoot, entry.Path),
 					Type:      string(entry.Entry.Type),
-					Breaking:  entry.Entry.Breaking,
+					Bump:      string(entry.Entry.Bump),
 					Component: entry.Entry.Component,
 					Audience:  entry.Entry.Audience,
 					Rank:      entry.Entry.Priority,
@@ -329,9 +329,6 @@ func renderBulletEntry(entry EntryWithMeta) string {
 	}
 
 	var firstLine strings.Builder
-	if entry.Entry.Breaking {
-		firstLine.WriteString("**Breaking** – ")
-	}
 	firstLine.WriteString(lines[0])
 	if len(entry.Entry.Component) > 0 {
 		firstLine.WriteString(" *(")

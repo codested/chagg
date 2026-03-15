@@ -222,19 +222,36 @@ func (m releaseMode) requiresGitWrites() bool {
 }
 
 func detectBumpLevel(group changelog.VersionGroup) int {
-	bump := bumpPatch
+	level := bumpPatch
 	for _, tg := range group.TypeGroups {
 		for _, entry := range tg.Entries {
-			if entry.Entry.Breaking || entry.Entry.Type == changeentry.ChangeTypeRemoval {
-				return bumpMajor
-			}
-			if entry.Entry.Type == changeentry.ChangeTypeFeature {
-				bump = bumpMinor
+			entryLevel := effectiveBumpInt(entry.Entry)
+			if entryLevel > level {
+				level = entryLevel
+				if level == bumpMajor {
+					return bumpMajor
+				}
 			}
 		}
 	}
+	return level
+}
 
-	return bump
+// effectiveBumpInt returns the resolved integer bump level for a single entry.
+// It respects an explicit Bump override, falling back to the type-based default.
+func effectiveBumpInt(entry changeentry.Entry) int {
+	bump := entry.Bump
+	if bump == "" {
+		bump = changeentry.DefaultBumpLevel(entry.Type)
+	}
+	switch bump {
+	case changeentry.BumpLevelMajor:
+		return bumpMajor
+	case changeentry.BumpLevelMinor:
+		return bumpMinor
+	default:
+		return bumpPatch
+	}
 }
 
 func bumpVersion(version changelog.SemVersion, level int) changelog.SemVersion {

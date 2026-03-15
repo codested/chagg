@@ -47,11 +47,11 @@ func TestLatestStableTagPrefersStableOverPreRelease(t *testing.T) {
 	}
 }
 
-func TestDetectBumpLevelMajorForBreaking(t *testing.T) {
+func TestDetectBumpLevelMajorForBumpOverride(t *testing.T) {
 	group := changelog.VersionGroup{
 		TypeGroups: []changelog.TypeGroup{{
 			Entries: []changelog.EntryWithMeta{{
-				Entry: changeentry.Entry{Type: changeentry.ChangeTypeFix, Breaking: true},
+				Entry: changeentry.Entry{Type: changeentry.ChangeTypeFix, Bump: changeentry.BumpLevelMajor},
 			}},
 		}},
 	}
@@ -72,6 +72,20 @@ func TestDetectBumpLevelMinorForFeature(t *testing.T) {
 
 	if level := detectBumpLevel(group); level != bumpMinor {
 		t.Fatalf("expected minor bump, got %d", level)
+	}
+}
+
+func TestDetectBumpLevelMinorForRemoval(t *testing.T) {
+	group := changelog.VersionGroup{
+		TypeGroups: []changelog.TypeGroup{{
+			Entries: []changelog.EntryWithMeta{{
+				Entry: changeentry.Entry{Type: changeentry.ChangeTypeRemoval},
+			}},
+		}},
+	}
+
+	if level := detectBumpLevel(group); level != bumpMinor {
+		t.Fatalf("expected minor bump for removal (type default), got %d", level)
 	}
 }
 

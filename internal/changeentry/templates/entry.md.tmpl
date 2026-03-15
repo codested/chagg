@@ -1,7 +1,7 @@
 {{- if .ShowHeader }}
 ---
-{{- if .Breaking }}
-breaking: true
+{{- if .ShowBump }}
+bump: {{ .Bump }}
 {{- end }}
 {{- if gt (len .Component) 0 }}
 {{ yamlField "component" .Component }}{{- end }}

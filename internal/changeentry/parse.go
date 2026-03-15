@@ -10,7 +10,7 @@ import (
 
 // frontMatter holds the raw YAML fields from a change entry file header.
 type frontMatter struct {
-	Breaking  bool                 `yaml:"breaking"`
+	Bump      string               `yaml:"bump"`
 	Component stringOrList         `yaml:"component"`
 	Audience  optionalStringOrList `yaml:"audience"`
 	Rank      int                  `yaml:"rank"`
@@ -151,9 +151,14 @@ func ParseEntryWithDefaults(content string, path string, defaultAudience []strin
 		audience = append([]string(nil), defaultAudience...)
 	}
 
+	bumpLevel, bumpErr := NormalizeBumpLevel(fm.Bump)
+	if bumpErr != nil {
+		return Entry{}, []error{bumpErr}
+	}
+
 	return Entry{
 		Type:      changeType,
-		Breaking:  fm.Breaking,
+		Bump:      bumpLevel,
 		Component: fm.Component,
 		Audience:  audience,
 		Priority:  fm.Rank,
