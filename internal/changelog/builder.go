@@ -220,6 +220,11 @@ func pluralizeCount(n int, singular, plural string) string {
 //     is >= the file's add date.
 //  3. Fallback: "staging".
 func resolveVersion(entry changeentry.Entry, addedAt time.Time, hasGit bool, tags []semver.Tag) string {
+	return ResolveVersion(entry, addedAt, hasGit, tags)
+}
+
+// ResolveVersion determines the version label for an entry given its git add time.
+func ResolveVersion(entry changeentry.Entry, addedAt time.Time, hasGit bool, tags []semver.Tag) string {
 	if entry.Release != "" {
 		for _, tag := range tags {
 			if releaseMatchesTag(entry.Release, tag) {
