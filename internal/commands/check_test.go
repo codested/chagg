@@ -62,7 +62,7 @@ func TestCheckFilesGlobExpansion(t *testing.T) {
 
 	// Change to changesDir to make glob work.
 	old, _ := os.Getwd()
-	defer os.Chdir(old) //nolint:errcheck
+	defer os.Chdir(old)  //nolint:errcheck
 	os.Chdir(changesDir) //nolint:errcheck
 
 	if err := checkFiles([]string{"*.md"}, root, false); err != nil {

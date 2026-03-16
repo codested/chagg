@@ -162,7 +162,7 @@ func releaseAction(_ context.Context, cmd *cli.Command) error {
 
 	entryCount := staging.Groups[0].TotalEntries()
 	if mode.dryRun {
-		fmt.Printf("Dry-run: would create local tag %s for module %q from %d staging %s.\n", tagName, module.Name, entryCount, pluralize(entryCount, "entry", "entries"))
+		fmt.Printf("Dry-run: would create local tag %s%s from %d staging %s.\n", tagName, moduleClause(module.Name), entryCount, pluralize(entryCount, "entry", "entries"))
 		if module.GitWrite.ReleasePush {
 			fmt.Printf("Dry-run: would push tag with: git push origin %s (auto-push from config)\n", tagName)
 		}
@@ -176,7 +176,7 @@ func releaseAction(_ context.Context, cmd *cli.Command) error {
 		return err
 	}
 
-	fmt.Printf("Created local tag %s for module %q from %d staging %s.\n", tagName, module.Name, entryCount, pluralize(entryCount, "entry", "entries"))
+	fmt.Printf("Created local tag %s%s from %d staging %s.\n", tagName, moduleClause(module.Name), entryCount, pluralize(entryCount, "entry", "entries"))
 
 	if mode.pushTag {
 		if err := pushTag(repoRoot, tagName); err != nil {

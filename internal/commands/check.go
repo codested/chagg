@@ -266,3 +266,13 @@ func pluralise(n int, singular, plural string) string {
 	}
 	return plural
 }
+
+// moduleClause returns " for module \"<name>\"" when the module has a name,
+// or an empty string for the root module (name == ""). This avoids printing
+// 'for module ""' in single-module repositories.
+func moduleClause(name string) string {
+	if name == "" {
+		return ""
+	}
+	return fmt.Sprintf(" for module %q", name)
+}
