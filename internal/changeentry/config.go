@@ -3,6 +3,7 @@ package changeentry
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -183,6 +184,16 @@ func ResolveModuleForChangesDir(repoRoot string, changesDir string) (ModuleConfi
 		return ModuleConfig{}, err
 	}
 
+	absRepoRoot, err := filepath.Abs(repoRoot)
+	if err != nil {
+		return ModuleConfig{}, err
+	}
+	if !gitutil.IsWithinDir(absRepoRoot, absChangesDir) {
+		return ModuleConfig{}, NewValidationError("config",
+			fmt.Sprintf("changes directory %s is outside the repository root %s", absChangesDir, absRepoRoot))
+	}
+
+	slog.Debug("resolving module for changes dir", "changesDir", absChangesDir, "repoRoot", absRepoRoot)
 	name, tagPrefix := inferModuleIdentity(repoRoot, absChangesDir)
 
 	if repoCfg != nil {
@@ -263,11 +274,21 @@ func ResolveModulesForChangesDirs(repoRoot string, changesDirs []string) (map[st
 
 	hasConfig := repoCfg != nil && hasExplicitModules(repoCfg)
 
+	absRepoRoot, absErr := filepath.Abs(repoRoot)
+	if absErr != nil {
+		return nil, absErr
+	}
+
 	result := make(map[string]ModuleConfig, len(changesDirs))
 	for _, changesDir := range changesDirs {
 		absChangesDir, absErr := filepath.Abs(changesDir)
 		if absErr != nil {
 			return nil, absErr
+		}
+
+		if !gitutil.IsWithinDir(absRepoRoot, absChangesDir) {
+			return nil, NewValidationError("config",
+				fmt.Sprintf("changes directory %s is outside the repository root %s", absChangesDir, absRepoRoot))
 		}
 
 		// Start from the base layer (copy so modules don't bleed into each other).
@@ -331,11 +352,14 @@ func buildBaseLayer(repoRoot string) (resolvedLayer, *RawConfig, string, error) 
 		return resolvedLayer{}, nil, "", err
 	}
 	if userRaw != nil {
+		slog.Debug("applying user config")
 		layer.applyGit(userRaw.Git.Write)
 		layer.applyDefaults(userRaw.Defaults)
 		if err := layer.applyTypes(userRaw.Types); err != nil {
 			return resolvedLayer{}, nil, "", fmt.Errorf("user config types: %w", err)
 		}
+	} else {
+		slog.Debug("no user config found")
 	}
 
 	// Repo config.
@@ -344,11 +368,14 @@ func buildBaseLayer(repoRoot string) (resolvedLayer, *RawConfig, string, error) 
 		return resolvedLayer{}, nil, "", err
 	}
 	if repoCfg != nil {
+		slog.Info("loaded repo config", "file", configName, "modules", len(repoCfg.Modules))
 		layer.applyGit(repoCfg.Git.Write)
 		layer.applyDefaults(repoCfg.Defaults)
 		if err := layer.applyTypes(repoCfg.Types); err != nil {
 			return resolvedLayer{}, nil, "", fmt.Errorf("%s types: %w", configName, err)
 		}
+	} else {
+		slog.Debug("no repo config found", "repoRoot", repoRoot)
 	}
 
 	return layer, repoCfg, configName, nil
@@ -362,8 +389,10 @@ func loadRawUserConfig() (*RawConfig, error) {
 		return nil, err
 	}
 	if !hasConfig {
+		slog.Debug("user config path not present", "path", path)
 		return nil, nil
 	}
+	slog.Info("loading user config", "path", path)
 	return loadRawConfig(path, "user config")
 }
 
@@ -612,6 +641,10 @@ func findRawModule(repoRoot string, modules []RawModule, absChangesDir string, c
 				fmt.Sprintf("modules[%d].changes-dir must be relative", i))
 		}
 		resolved := filepath.Join(repoRoot, clean)
+		if !gitutil.IsWithinDir(repoRoot, resolved) {
+			return nil, NewValidationError("config",
+				fmt.Sprintf("modules[%d].changes-dir %q escapes the repository root", i, changesDirRaw))
+		}
 		lowerResolved := strings.ToLower(resolved)
 		if seenDirs[lowerResolved] {
 			return nil, NewValidationError("config",
@@ -647,6 +680,7 @@ func hasExplicitModules(cfg *RawConfig) bool {
 func inferModuleIdentity(repoRoot, changesDir string) (string, string) {
 	rootChangesDir := filepath.Join(repoRoot, ".changes")
 	if samePath(rootChangesDir, changesDir) {
+		slog.Debug("inferred root module identity", "changesDir", changesDir)
 		return "", "" // root module has no name; tag prefix is empty (no prefix)
 	}
 
@@ -654,6 +688,7 @@ func inferModuleIdentity(repoRoot, changesDir string) (string, string) {
 	if parent == "" || parent == "." || parent == string(filepath.Separator) {
 		parent = "default"
 	}
+	slog.Debug("inferred module identity", "changesDir", changesDir, "name", parent, "tagPrefix", parent+"-")
 	return parent, parent + "-"
 }
 

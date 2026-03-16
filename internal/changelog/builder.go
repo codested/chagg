@@ -2,6 +2,7 @@ package changelog
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
@@ -21,6 +22,7 @@ import (
 // When git is available but tag metadata cannot be read, an error is returned.
 // File-system errors are returned as-is.
 func LoadChangeLog(repoRoot string, module changeentry.ModuleConfig, filter FilterOptions) (*ChangeLog, error) {
+	slog.Info("loading changelog", "module", module.Name, "changesDir", module.ChangesDir, "tagPrefix", module.TagPrefix)
 	tags, err := gitutil.ListSemVerTags(repoRoot, module.TagPrefix)
 	if err != nil {
 		return nil, fmt.Errorf("load version tags: %w", err)
@@ -36,6 +38,7 @@ func LoadChangeLog(repoRoot string, module changeentry.ModuleConfig, filter Filt
 	}
 
 	entries = applyFilter(entries, filter)
+	slog.Info("changelog loaded", "module", module.Name, "entries", len(entries), "tags", len(tags))
 
 	cl := buildChangeLog(entries, tags, module)
 	cl.Module = module
@@ -149,6 +152,7 @@ func loadEntries(repoRoot string, module changeentry.ModuleConfig, tags []semver
 		addedAt, addedCommitHash, originalFilename, hasGit := gitutil.FileAddedMeta(repoRoot, path)
 
 		version := resolveVersion(entry, addedAt, hasGit, tags)
+		slog.Debug("resolved entry version", "file", filepath.Base(path), "version", version)
 
 		entries = append(entries, EntryWithMeta{
 			Entry:            entry,

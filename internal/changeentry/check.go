@@ -2,6 +2,7 @@ package changeentry
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -23,10 +24,22 @@ func (r CheckResult) Valid() bool {
 
 // CheckChangesDir validates all ".md" files found recursively inside changesDir.
 // Each file is parsed and its validation errors are collected in CheckResult.
+// Files that resolve (via symlinks) to a path outside changesDir are skipped with a warning.
 func CheckChangesDir(changesDir string, module ModuleConfig) ([]CheckResult, error) {
+	absChangesDir, err := filepath.Abs(changesDir)
+	if err != nil {
+		return nil, err
+	}
+	// Resolve the changesDir itself so comparisons work on macOS where /var → /private/var.
+	realChangesDir := absChangesDir
+	if resolved, resolveErr := filepath.EvalSymlinks(absChangesDir); resolveErr == nil {
+		realChangesDir = resolved
+	}
+	slog.Debug("checking changes dir", "dir", realChangesDir, "module", module.Name)
+
 	var results []CheckResult
 
-	err := filepath.WalkDir(changesDir, func(path string, d os.DirEntry, err error) error {
+	walkErr := filepath.WalkDir(absChangesDir, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -37,7 +50,19 @@ func CheckChangesDir(changesDir string, module ModuleConfig) ([]CheckResult, err
 			return nil
 		}
 
-		contentBytes, readErr := os.ReadFile(path)
+		// Resolve symlinks and verify the real path stays within changesDir.
+		realPath, resolveErr := filepath.EvalSymlinks(path)
+		if resolveErr != nil {
+			slog.Warn("skipping unresolvable symlink", "path", path, "err", resolveErr)
+			return nil
+		}
+		if !gitutil.IsWithinDir(realChangesDir, realPath) {
+			slog.Warn("skipping entry whose symlink target escapes .changes", "path", path, "target", realPath)
+			return nil
+		}
+
+		slog.Debug("checking entry", "path", path)
+		contentBytes, readErr := os.ReadFile(realPath)
 		if readErr != nil {
 			results = append(results, CheckResult{
 				Path:   path,
@@ -51,7 +76,8 @@ func CheckChangesDir(changesDir string, module ModuleConfig) ([]CheckResult, err
 		return nil
 	})
 
-	return results, err
+	slog.Info("checked changes dir", "dir", absChangesDir, "entries", len(results))
+	return results, walkErr
 }
 
 // CheckAllChangesDirs locates every ".changes" directory reachable from startPath
@@ -61,6 +87,7 @@ func CheckAllChangesDirs(startPath string) ([]CheckResult, error) {
 	if err != nil {
 		return nil, err
 	}
+	slog.Info("checking all .changes dirs", "root", root)
 
 	dirs, err := gitutil.FindAllChangesDirs(root)
 	if err != nil {

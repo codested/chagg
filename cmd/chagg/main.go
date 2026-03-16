@@ -18,14 +18,26 @@ func main() {
 		Usage: "A modern release-note workflow tool",
 		Flags: []cli.Flag{
 			&cli.BoolFlag{
+				Name:    "verbose",
+				Aliases: []string{"v"},
+				Usage:   "Enable verbose logging (key operational steps)",
+			},
+			&cli.BoolFlag{
 				Name:  "debug",
-				Usage: "Enable debug logging",
+				Usage: "Enable debug logging (detailed internals, implies --verbose)",
 			},
 		},
 		Before: func(ctx context.Context, cmd *cli.Command) (context.Context, error) {
+			level := slog.LevelWarn // default: only warnings and errors
+			if cmd.Bool("verbose") {
+				level = slog.LevelInfo
+			}
 			if cmd.Bool("debug") {
+				level = slog.LevelDebug
+			}
+			if level < slog.LevelWarn {
 				slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
-					Level: slog.LevelDebug,
+					Level: level,
 				})))
 			}
 			return ctx, nil

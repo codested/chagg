@@ -3,6 +3,7 @@ package gitutil
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -13,8 +14,24 @@ import (
 	"github.com/codested/chagg/internal/semver"
 )
 
+// IsWithinDir reports whether target is inside (or equal to) parent.
+// Both paths must be absolute and are cleaned before comparison.
+func IsWithinDir(parent, target string) bool {
+	p := filepath.Clean(parent)
+	t := filepath.Clean(target)
+	if p == t {
+		return true
+	}
+	rel, err := filepath.Rel(p, t)
+	if err != nil {
+		return false
+	}
+	return !strings.HasPrefix(rel, "..")
+}
+
 // RunGit runs a git command in dir and returns the combined stdout output.
 func RunGit(dir string, args ...string) (string, error) {
+	slog.Debug("git", "args", args, "dir", dir)
 	cmd := exec.Command("git", args...)
 	cmd.Dir = dir
 	out, err := cmd.Output()
@@ -37,9 +54,11 @@ func SplitLines(s string) []string {
 // When git is unavailable or the repository has no matching tags, an empty
 // slice and no error are returned.
 func ListSemVerTags(repoRoot string, tagPrefix string) ([]semver.Tag, error) {
+	slog.Debug("listing semver tags", "repoRoot", repoRoot, "tagPrefix", tagPrefix)
 	raw, err := RunGit(repoRoot, "tag", "-l",
 		"--format=%(refname:short)")
 	if err != nil {
+		slog.Debug("git tag list unavailable, proceeding without history")
 		return nil, nil // git unavailable — caller proceeds without history
 	}
 
@@ -81,6 +100,7 @@ func ListSemVerTags(repoRoot string, tagPrefix string) ([]semver.Tag, error) {
 		return tags[i].CommitDate.Before(tags[j].CommitDate)
 	})
 
+	slog.Info("found semver tags", "count", len(tags), "tagPrefix", tagPrefix)
 	return tags, nil
 }
 
@@ -101,6 +121,7 @@ func FileAddedMeta(repoRoot, path string) (time.Time, string, string, bool) {
 	if relErr != nil {
 		relPath = path
 	}
+	slog.Debug("resolving file add metadata", "path", relPath)
 
 	// --diff-filter=A   : only commits where the file was *added*
 	// --follow           : follow renames back to the original creation
@@ -254,10 +275,12 @@ func FindGitRoot(startPath string) (string, bool, error) {
 	if err != nil {
 		return "", false, err
 	}
+	slog.Debug("searching for git root", "startPath", current)
 
 	for {
 		gitPath := filepath.Join(current, ".git")
 		if _, gitErr := os.Stat(gitPath); gitErr == nil {
+			slog.Info("found git root", "path", current)
 			return current, true, nil
 		} else if !errors.Is(gitErr, os.ErrNotExist) {
 			return "", false, gitErr
@@ -265,6 +288,7 @@ func FindGitRoot(startPath string) (string, bool, error) {
 
 		parent := filepath.Dir(current)
 		if parent == current {
+			slog.Info("no git root found, using CWD as boundary", "path", current)
 			return current, false, nil
 		}
 		current = parent
@@ -274,10 +298,17 @@ func FindGitRoot(startPath string) (string, bool, error) {
 // FindAllChangesDirs recursively finds all ".changes" directories under root.
 // It does not recurse into ".git" directories or into ".changes" directories
 // themselves (nested ".changes" hierarchies are not supported).
+// All returned paths are guaranteed to be within root.
 func FindAllChangesDirs(root string) ([]string, error) {
+	absRoot, err := filepath.Abs(root)
+	if err != nil {
+		return nil, err
+	}
+	slog.Debug("scanning for .changes dirs", "root", absRoot)
+
 	var dirs []string
 
-	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+	walkErr := filepath.WalkDir(absRoot, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -288,6 +319,12 @@ func FindAllChangesDirs(root string) ([]string, error) {
 		name := d.Name()
 
 		if name == ".changes" {
+			// Defensive: verify the found dir is within root (should always be true).
+			if !IsWithinDir(absRoot, path) {
+				slog.Warn("skipping .changes dir outside repo root", "path", path, "root", absRoot)
+				return filepath.SkipDir
+			}
+			slog.Debug("found .changes dir", "path", path)
 			dirs = append(dirs, path)
 			return filepath.SkipDir
 		}
@@ -300,5 +337,6 @@ func FindAllChangesDirs(root string) ([]string, error) {
 		return nil
 	})
 
-	return dirs, err
+	slog.Info("found .changes directories", "count", len(dirs))
+	return dirs, walkErr
 }
