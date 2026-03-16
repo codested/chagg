@@ -140,6 +140,35 @@ func configList(cio changeentry.ConfigIO, w io.Writer) error {
 	for _, d := range module.Types.Definitions() {
 		fmt.Fprintf(w, "  %s\n", string(d.ID))
 	}
+
+	// Modules section: only shown when more than one module exists (multi-module
+	// repo) or the repo has a root .changes directory.
+	cwd, err := os.Getwd()
+	if err != nil {
+		return nil // non-fatal; skip modules listing
+	}
+	repoRoot, _, err := gitutil.FindGitRoot(cwd)
+	if err != nil {
+		return nil // non-fatal; skip modules listing
+	}
+	dirs, err := gitutil.FindAllChangesDirs(repoRoot)
+	if err != nil || len(dirs) == 0 {
+		return nil
+	}
+	moduleMap, err := changeentry.ResolveModulesForChangesDirs(repoRoot, dirs)
+	if err != nil {
+		return nil // non-fatal; skip modules listing
+	}
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Modules (use 'chagg config modules' for details):")
+	for _, dir := range dirs {
+		m := moduleMap[dir]
+		label := m.Name
+		if label == "" {
+			label = "(root)"
+		}
+		fmt.Fprintf(w, "  %s\n", label)
+	}
 	return nil
 }
 
