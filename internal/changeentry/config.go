@@ -214,6 +214,9 @@ func ResolveModuleForChangesDir(repoRoot string, changesDir string) (ModuleConfi
 			if !containsSamePath(discoveredDirs, absChangesDir) {
 				discoveredDirs = append(discoveredDirs, absChangesDir)
 			}
+			if mixErr := validateNoMixedRootAndNested(repoRoot, discoveredDirs); mixErr != nil {
+				return ModuleConfig{}, mixErr
+			}
 			if collisionErr := validateInferredModuleNames(repoRoot, discoveredDirs); collisionErr != nil {
 				return ModuleConfig{}, collisionErr
 			}
@@ -226,6 +229,9 @@ func ResolveModuleForChangesDir(repoRoot string, changesDir string) (ModuleConfi
 		}
 		if !containsSamePath(discoveredDirs, absChangesDir) {
 			discoveredDirs = append(discoveredDirs, absChangesDir)
+		}
+		if mixErr := validateNoMixedRootAndNested(repoRoot, discoveredDirs); mixErr != nil {
+			return ModuleConfig{}, mixErr
 		}
 		if collisionErr := validateInferredModuleNames(repoRoot, discoveredDirs); collisionErr != nil {
 			return ModuleConfig{}, collisionErr
@@ -248,6 +254,11 @@ func ResolveModulesForChangesDirs(repoRoot string, changesDirs []string) (map[st
 	layer, repoCfg, configName, err := buildBaseLayer(repoRoot)
 	if err != nil {
 		return nil, err
+	}
+
+	// Forbid mixing root .changes with nested module .changes directories.
+	if mixErr := validateNoMixedRootAndNested(repoRoot, changesDirs); mixErr != nil {
+		return nil, mixErr
 	}
 
 	hasConfig := repoCfg != nil && hasExplicitModules(repoCfg)
@@ -636,11 +647,7 @@ func hasExplicitModules(cfg *RawConfig) bool {
 func inferModuleIdentity(repoRoot, changesDir string) (string, string) {
 	rootChangesDir := filepath.Join(repoRoot, ".changes")
 	if samePath(rootChangesDir, changesDir) {
-		repoBase := filepath.Base(filepath.Clean(repoRoot))
-		if repoBase == "" || repoBase == "." || repoBase == string(filepath.Separator) {
-			repoBase = "default"
-		}
-		return repoBase, ""
+		return "", "" // root module has no name; tag prefix is empty (no prefix)
 	}
 
 	parent := filepath.Base(filepath.Dir(changesDir))
@@ -648,6 +655,26 @@ func inferModuleIdentity(repoRoot, changesDir string) (string, string) {
 		parent = "default"
 	}
 	return parent, parent + "-"
+}
+
+// validateNoMixedRootAndNested returns an error if both a root .changes
+// directory and nested module .changes directories are present.
+func validateNoMixedRootAndNested(repoRoot string, changesDirs []string) error {
+	rootChangesDir := filepath.Join(repoRoot, ".changes")
+	hasRoot := false
+	for _, dir := range changesDirs {
+		abs, _ := filepath.Abs(dir)
+		if samePath(abs, rootChangesDir) {
+			hasRoot = true
+			break
+		}
+	}
+	if hasRoot && len(changesDirs) > 1 {
+		return NewValidationError("config",
+			"cannot mix a root .changes directory with nested module .changes directories; "+
+				"use only nested modules or only a root .changes directory")
+	}
+	return nil
 }
 
 func validateInferredModuleNames(repoRoot string, changesDirs []string) error {

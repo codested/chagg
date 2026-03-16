@@ -46,6 +46,10 @@ func TestResolveModuleInfosSingleRootModule(t *testing.T) {
 	if m.ChangesDir != ".changes" {
 		t.Fatalf("expected changes_dir '.changes', got %q", m.ChangesDir)
 	}
+	// Root module has empty name.
+	if m.Name != "" {
+		t.Fatalf("expected empty name for root module, got %q", m.Name)
+	}
 	// Root module has empty tag prefix.
 	if m.TagPrefix != "" {
 		t.Fatalf("expected empty tag prefix for root module, got %q", m.TagPrefix)
@@ -105,6 +109,17 @@ func TestResolveModuleInfosPathUsesForwardSlashes(t *testing.T) {
 	}
 	if infos[0].ChangesDir != "services/api/.changes" {
 		t.Fatalf("expected 'services/api/.changes', got %q", infos[0].ChangesDir)
+	}
+}
+
+func TestResolveModuleInfosMixedRootAndNestedFails(t *testing.T) {
+	root := makeGitRepo(t)
+	mkChangesDir(t, root, ".changes")
+	mkChangesDir(t, root, "api/.changes")
+
+	_, err := resolveModuleInfos(root)
+	if err == nil {
+		t.Fatal("expected error when mixing root .changes with nested module .changes")
 	}
 }
 
