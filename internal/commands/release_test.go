@@ -5,6 +5,7 @@ import (
 
 	"github.com/codested/chagg/internal/changeentry"
 	"github.com/codested/chagg/internal/changelog"
+	"github.com/codested/chagg/internal/gitutil"
 	"github.com/codested/chagg/internal/semver"
 )
 
@@ -226,5 +227,42 @@ func TestConfigAutoPushDoesNothingInDryRun(t *testing.T) {
 
 	if mode.pushTag {
 		t.Fatal("expected no auto-push in dry-run mode")
+	}
+}
+
+// ── ensureNoPendingPush ───────────────────────────────────────────────────────
+
+func TestEnsureNoPendingPushNoUpstreamSkipsCheck(t *testing.T) {
+	// A freshly-initialised git repo has no remote/upstream, so the check
+	// must be silently skipped (return nil).
+	root := makeGitRepo(t)
+	if err := ensureNoPendingPush(root); err != nil {
+		t.Fatalf("expected no error when no upstream is configured, got: %v", err)
+	}
+}
+
+func TestEnsureNoPendingPushCleanBranchPasses(t *testing.T) {
+	// A git repo that has an upstream and is in sync should pass.
+	// We simulate this by creating a bare "remote" and pushing to it.
+	local := t.TempDir()
+	remote := t.TempDir()
+
+	setup := func(dir string, args ...string) {
+		t.Helper()
+		if _, err := gitutil.RunGit(dir, args...); err != nil {
+			t.Skipf("git %v unavailable: %v", args, err)
+		}
+	}
+
+	setup(remote, "init", "--bare")
+	setup(local, "init")
+	setup(local, "config", "user.email", "test@test.com")
+	setup(local, "config", "user.name", "test")
+	setup(local, "commit", "--allow-empty", "-m", "init")
+	setup(local, "remote", "add", "origin", remote)
+	setup(local, "push", "-u", "origin", "HEAD")
+
+	if err := ensureNoPendingPush(local); err != nil {
+		t.Fatalf("expected no error when branch is up to date, got: %v", err)
 	}
 }

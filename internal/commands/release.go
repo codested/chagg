@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"regexp"
@@ -91,6 +92,9 @@ func releaseAction(_ context.Context, cmd *cli.Command) error {
 
 	if mode.requiresGitWrites() {
 		if err := ensureCleanWorkingTree(repoRoot); err != nil {
+			return err
+		}
+		if err := ensureNoPendingPush(repoRoot); err != nil {
 			return err
 		}
 	}
@@ -320,6 +324,31 @@ func pushTag(repoRoot string, version string) error {
 	}
 
 	return nil
+}
+
+// ensureNoPendingPush returns an error when the current branch has local
+// commits that have not been pushed to its upstream tracking branch. A tag
+// created on an unpushed commit would be unreachable on the remote after
+// pushing the tag alone.
+//
+// The check is silently skipped when there is no upstream configured (e.g.
+// a local-only branch or a detached HEAD), so it never blocks offline
+// workflows.
+func ensureNoPendingPush(repoRoot string) error {
+	out, err := gitutil.RunGit(repoRoot, "rev-list", "--count", "@{u}..HEAD")
+	if err != nil {
+		// No upstream tracking branch — nothing to enforce.
+		slog.Debug("skipping unpushed-commits check: no upstream branch")
+		return nil
+	}
+
+	n := strings.TrimSpace(out)
+	if n == "0" || n == "" {
+		return nil
+	}
+
+	return changeentry.NewValidationError("release",
+		fmt.Sprintf("current branch has %s unpushed commit(s); push to the upstream branch before releasing so the tag points to a commit the remote already has", n))
 }
 
 func ensureCleanWorkingTree(repoRoot string) error {
