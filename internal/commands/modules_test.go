@@ -108,15 +108,15 @@ func TestResolveModuleInfosPathUsesForwardSlashes(t *testing.T) {
 	}
 }
 
-func TestRenderModulesTable(t *testing.T) {
+func TestRenderModulesText(t *testing.T) {
 	infos := []ModuleInfo{
 		{Name: "api", ChangesDir: "api/.changes", TagPrefix: "api-"},
 		{Name: "worker", ChangesDir: "worker/.changes", TagPrefix: "worker-"},
 	}
 
 	var buf bytes.Buffer
-	if err := renderModulesTable(infos, &buf); err != nil {
-		t.Fatalf("renderModulesTable error: %v", err)
+	if err := renderModulesText(infos, &buf); err != nil {
+		t.Fatalf("renderModulesText error: %v", err)
 	}
 
 	out := buf.String()
@@ -128,6 +128,13 @@ func TestRenderModulesTable(t *testing.T) {
 	}
 	if !strings.Contains(out, "api-") || !strings.Contains(out, "worker-") {
 		t.Fatalf("expected tag prefixes in output, got:\n%s", out)
+	}
+}
+
+func TestConfigModulesSubcommandIsNamed(t *testing.T) {
+	cmd := ConfigModulesSubcommand()
+	if cmd.Name != "modules" {
+		t.Fatalf("expected command name 'modules', got %q", cmd.Name)
 	}
 }
 

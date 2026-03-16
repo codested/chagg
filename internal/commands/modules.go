@@ -15,14 +15,15 @@ import (
 )
 
 // ModuleInfo is the public representation of a resolved module, used for both
-// table and JSON output.
+// text and JSON output.
 type ModuleInfo struct {
 	Name       string `json:"name"`
 	ChangesDir string `json:"changes_dir"` // repo-root-relative, forward slashes
 	TagPrefix  string `json:"tag_prefix"`
 }
 
-func ModulesCommand() *cli.Command {
+// ConfigModulesSubcommand returns the modules subcommand for use under config.
+func ConfigModulesSubcommand() *cli.Command {
 	return &cli.Command{
 		Name:  "modules",
 		Usage: "List all discovered modules and their .changes directories",
@@ -33,8 +34,8 @@ func ModulesCommand() *cli.Command {
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:  "format",
-				Usage: "Output format: table or json",
-				Value: "table",
+				Usage: "Output format: text or json",
+				Value: "text",
 			},
 		},
 		Action: modulesAction,
@@ -64,7 +65,7 @@ func modulesAction(_ context.Context, cmd *cli.Command) error {
 	case "json":
 		return renderModulesJSON(infos, os.Stdout)
 	default:
-		return renderModulesTable(infos, os.Stdout)
+		return renderModulesText(infos, os.Stdout)
 	}
 }
 
@@ -101,7 +102,7 @@ func resolveModuleInfos(repoRoot string) ([]ModuleInfo, error) {
 	return infos, nil
 }
 
-func renderModulesTable(infos []ModuleInfo, w io.Writer) error {
+func renderModulesText(infos []ModuleInfo, w io.Writer) error {
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 	fmt.Fprintf(tw, "NAME\tCHANGES-DIR\tTAG-PREFIX\n")
 	for _, m := range infos {

@@ -43,6 +43,7 @@ func ConfigCommand(cio changeentry.ConfigIO) *cli.Command {
 		},
 		Commands: []*cli.Command{
 			configTypesSubcommand(cio),
+			ConfigModulesSubcommand(),
 		},
 		Action: func(ctx context.Context, cmd *cli.Command) error {
 			return configAction(ctx, cmd, cio)

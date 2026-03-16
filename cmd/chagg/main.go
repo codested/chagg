@@ -23,7 +23,6 @@ func main() {
 			commands.GenerateCommand(),
 			commands.ReleaseCommand(),
 			commands.ConfigCommand(changeentry.NewFileConfigIO()),
-			commands.ModulesCommand(),
 		},
 	}
 
