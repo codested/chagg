@@ -27,16 +27,9 @@ jobs:
       - name: Run tests
         run: go test ./...
 
-      # Build the tool itself first so we can use it to generate the notes.
-      - name: Build chagg
-        run: go build -o ./chagg-bin ./cmd/chagg
-
-      # Generate the changelog section for this specific release.
-      # -n 1 --no-show-staging shows exactly the most recently tagged release.
-      # tail -n +3 strips the "# Changelog" header line and the blank line
-      # that follows it, leaving a clean version section for the release body.
       - name: Generate release notes
-        run: ./chagg-bin generate -n 1 --show-staging false | tail -n +3 > release-notes.md
+        id: notes
+        uses: codested/chagg-github-action/release@v0.1.0
 
       # Cross-compile stripped binaries for all major platforms.
       - name: Build release binaries
@@ -72,6 +65,6 @@ jobs:
         run: |
           gh release create "${{ github.ref_name }}" \
             --title "${{ github.ref_name }}" \
-            --notes-file release-notes.md \
+            --notes "${{ steps.notes.outputs.changelog }}" \
             ${{ steps.release_type.outputs.prerelease }} \
             dist/*
