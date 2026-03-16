@@ -53,10 +53,17 @@ func SplitLines(s string) []string {
 // optionally scoped by tagPrefix, ordered from oldest to newest by SemVer.
 // When git is unavailable or the repository has no matching tags, an empty
 // slice and no error are returned.
+//
+// Tag name and date are fetched in a single git call using --format so the
+// number of subprocess invocations is O(1) instead of O(n tags).
+// %(creatordate) gives the commit author date for lightweight tags and the
+// tagger date for annotated tags; both are accurate enough for version
+// attribution ordering.
 func ListSemVerTags(repoRoot string, tagPrefix string) ([]semver.Tag, error) {
 	slog.Debug("listing semver tags", "repoRoot", repoRoot, "tagPrefix", tagPrefix)
-	raw, err := RunGit(repoRoot, "tag", "-l",
-		"--format=%(refname:short)")
+
+	// Fetch name and ISO-8601 date in one call, separated by a NUL-safe delimiter.
+	raw, err := RunGit(repoRoot, "tag", "-l", "--format=%(refname:short)\t%(creatordate:iso-strict)")
 	if err != nil {
 		slog.Debug("git tag list unavailable, proceeding without history")
 		return nil, nil // git unavailable — caller proceeds without history
@@ -64,7 +71,12 @@ func ListSemVerTags(repoRoot string, tagPrefix string) ([]semver.Tag, error) {
 
 	var tags []semver.Tag
 	for _, line := range SplitLines(raw) {
-		name := strings.TrimSpace(line)
+		parts := strings.SplitN(line, "\t", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		name := strings.TrimSpace(parts[0])
+		dateStr := strings.TrimSpace(parts[1])
 		if name == "" {
 			continue
 		}
@@ -79,14 +91,9 @@ func ListSemVerTags(repoRoot string, tagPrefix string) ([]semver.Tag, error) {
 			continue
 		}
 
-		dateStr, dateErr := RunGit(repoRoot, "log", "--format=%aI", "-1", name)
-		if dateErr != nil {
-			return nil, fmt.Errorf("get commit date for tag %q: %w", name, dateErr)
-		}
-
-		t, parseErr := time.Parse(time.RFC3339, strings.TrimSpace(dateStr))
+		t, parseErr := time.Parse(time.RFC3339, dateStr)
 		if parseErr != nil {
-			return nil, fmt.Errorf("parse commit date for tag %q: %w", name, parseErr)
+			return nil, fmt.Errorf("parse date for tag %q: %w", name, parseErr)
 		}
 
 		tags = append(tags, semver.Tag{Name: name, CommitDate: t, Version: version, HasVPrefix: hasVPrefix})
