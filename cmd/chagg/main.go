@@ -28,18 +28,18 @@ func main() {
 			},
 		},
 		Before: func(ctx context.Context, cmd *cli.Command) (context.Context, error) {
-			level := slog.LevelWarn // default: only warnings and errors
+			level := slog.LevelWarn // default: only warnings/errors, no operational noise
 			if cmd.Bool("verbose") {
 				level = slog.LevelInfo
 			}
 			if cmd.Bool("debug") {
 				level = slog.LevelDebug
 			}
-			if level < slog.LevelWarn {
-				slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
-					Level: level,
-				})))
-			}
+			// Always replace the default handler so the Go runtime's default
+			// (which outputs INFO and above) is never active.
+			slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+				Level: level,
+			})))
 			return ctx, nil
 		},
 		Commands: []*cli.Command{
