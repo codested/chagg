@@ -64,6 +64,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: codested/chagg-github-action/ci@v0.1.0
+      - uses: codested/chagg-github-action/ci@0.1.0
         # with:
         #   slack_webhook_on_merge: ${{ secrets.SLACK_WEBHOOK }}
