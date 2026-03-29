@@ -1,0 +1,94 @@
+version: 2
+
+before:
+  hooks:
+    - go test ./...
+
+builds:
+  - main: ./cmd/chagg
+    binary: chagg
+    ldflags:
+      - -s -w
+      - -X github.com/codested/chagg/internal/version.Version={{ .Version }}
+      - -X github.com/codested/chagg/internal/version.Commit={{ .Commit }}
+      - -X github.com/codested/chagg/internal/version.Date={{ .Date }}
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - formats: [binary]
+    # Keep the same naming convention as the current release workflow.
+    name_template: "chagg-{{ .Os }}-{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+
+checksum:
+  name_template: checksums.txt
+
+release:
+  # chagg generates its own release notes; point GoReleaser at the file
+  # produced by the workflow step so it doesn't fall back to commit messages.
+  disable: false
+  prerelease: auto
+  name_template: "{{ .Tag }}"
+
+changelog:
+  # When --release-notes is passed on the CLI, GoReleaser uses that file
+  # and skips its own changelog.  Do NOT set disable: true here — that
+  # silently ignores --release-notes and produces an empty release body.
+  sort: asc
+
+# ── Package managers ───────────────────────────────────────────────────────────
+#
+# TODO:
+#   AUR (aur.archlinux.org):
+#     1. Create an account at https://aur.archlinux.org
+#     2. Add your SSH public key in AUR account settings
+#     3. Register the package name "chagg-bin" on AUR
+#     4. Add the SSH private key as a secret named AUR_KEY in the chagg repo
+#     5. Set skip_upload to false below
+#     Users install with: yay -S chagg-bin
+
+homebrew_casks:
+  - name: chagg
+    # TODO: Remove skip_upload when ready to publish publicly.
+    skip_upload: true
+    repository:
+      owner: codested
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    homepage: "https://chagg.dev"
+    description: "A modern release-note workflow tool"
+
+scoops:
+  - name: chagg
+    # TODO: Remove skip_upload when ready to publish publicly.
+    skip_upload: true
+    repository:
+      owner: codested
+      name: scoop-bucket
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    homepage: "https://chagg.dev"
+    description: "A modern release-note workflow tool"
+    license: MIT
+
+aurs:
+  - name: chagg-bin
+    # TODO: Remove skip_upload when AUR account and SSH key are set up (see checklist above).
+    skip_upload: true
+    git_url: "ssh://aur@aur.archlinux.org/chagg-bin.git"
+    private_key: "{{ .Env.AUR_KEY }}"
+    maintainers:
+      - "codested <https://github.com/codested>"
+    homepage: "https://chagg.dev"
+    description: "A modern release-note workflow tool"
+    license: MIT
+    package: |-
+      install -Dm755 "./chagg" "${pkgdir}/usr/bin/chagg"
+      install -Dm644 "./LICENSE" "${pkgdir}/usr/share/licenses/chagg/LICENSE"

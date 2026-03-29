@@ -1,0 +1,59 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v?[0-9]+.[0-9]+.[0-9]+*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Create release
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # Full history is required so chagg can assign entries to the
+          # correct tag via git log.
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      # Build a linux binary first so we can generate release notes with chagg
+      # itself before GoReleaser takes over.
+      - name: Build chagg for release notes
+        run: |
+          VERSION_PKG="github.com/codested/chagg/internal/version"
+          VERSION="${GITHUB_REF_NAME#v}"
+          LDFLAGS="-s -w -X ${VERSION_PKG}.Version=${VERSION} -X ${VERSION_PKG}.Commit=${GITHUB_SHA} -X ${VERSION_PKG}.Date=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          go build -ldflags="$LDFLAGS" -o /tmp/chagg-release ./cmd/chagg
+
+      - name: Generate release notes
+        run: |
+          /tmp/chagg-release generate -n 1 --show-staging false | tail -n +3 > release-notes.md
+
+      - name: Upload changelog to chagg service
+        if: env.CHAGG_API_KEY != ''
+        env:
+          CHAGG_API_KEY: ${{ secrets.CHAGG_API_KEY }}
+        run: |
+          /tmp/chagg-release generate -n 1 --format json > release.json
+          curl -fsSL -X POST \
+            -H 'Content-Type: application/json' \
+            -H "Authorization: Bearer $CHAGG_API_KEY" \
+            --data @release.json \
+            https://api.chagg.dev/changelogs
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v7
+        with:
+          version: '~> v2'
+          args: release --release-notes=release-notes.md
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}

@@ -1,0 +1,13 @@
+# IDEs
+.idea/
+
+# MacOS
+.DS_Store
+
+# Binary
+/bin/chagg
+
+# GoReleaser
+/dist/
+release-notes.md
+release.json

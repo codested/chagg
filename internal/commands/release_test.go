@@ -1,0 +1,387 @@
+package commands
+
+import (
+	"testing"
+
+	"github.com/codested/chagg/internal/changeentry"
+	"github.com/codested/chagg/internal/changelog"
+	"github.com/codested/chagg/internal/gitutil"
+	"github.com/codested/chagg/internal/semver"
+)
+
+func TestBumpVersionPatch(t *testing.T) {
+	version := semver.Bump(semver.SemVersion{Major: 1, Minor: 2, Patch: 3}, semver.BumpPatch)
+
+	if version.String(true) != "v1.2.4" {
+		t.Fatalf("expected v1.2.4, got %s", version.String(true))
+	}
+}
+
+func TestBumpVersionMinor(t *testing.T) {
+	version := semver.Bump(semver.SemVersion{Major: 1, Minor: 2, Patch: 3}, semver.BumpMinor)
+
+	if version.String(false) != "1.3.0" {
+		t.Fatalf("expected 1.3.0, got %s", version.String(false))
+	}
+}
+
+func TestBumpVersionMajor(t *testing.T) {
+	version := semver.Bump(semver.SemVersion{Major: 1, Minor: 2, Patch: 3}, semver.BumpMajor)
+
+	if version.String(true) != "v2.0.0" {
+		t.Fatalf("expected v2.0.0, got %s", version.String(true))
+	}
+}
+
+func TestLatestStableTagPrefersStableOverPreRelease(t *testing.T) {
+	tags := []semver.Tag{
+		{Name: "v1.2.0-beta.1", Version: semver.SemVersion{Major: 1, Minor: 2, Patch: 0, PreRelease: "beta.1"}},
+		{Name: "v1.1.0", Version: semver.SemVersion{Major: 1, Minor: 1, Patch: 0}},
+	}
+
+	tag, ok := semver.LatestStable(tags)
+	if !ok {
+		t.Fatalf("expected a stable tag")
+	}
+
+	if tag.Name != "v1.1.0" {
+		t.Fatalf("expected v1.1.0, got %s", tag.Name)
+	}
+}
+
+func TestDetectBumpLevelMajorForBumpOverride(t *testing.T) {
+	group := changelog.VersionGroup{
+		TypeGroups: []changelog.TypeGroup{{
+			Entries: []changelog.EntryWithMeta{{
+				Entry: changeentry.Entry{Type: changeentry.ChangeTypeFix, Bump: changeentry.BumpLevelMajor},
+			}},
+		}},
+	}
+
+	if level := detectBumpLevel(group, changeentry.DefaultTypeRegistry()); level != semver.BumpMajor {
+		t.Fatalf("expected major bump, got %d", level)
+	}
+}
+
+func TestDetectBumpLevelMinorForFeature(t *testing.T) {
+	group := changelog.VersionGroup{
+		TypeGroups: []changelog.TypeGroup{{
+			Entries: []changelog.EntryWithMeta{{
+				Entry: changeentry.Entry{Type: changeentry.ChangeTypeFeature},
+			}},
+		}},
+	}
+
+	if level := detectBumpLevel(group, changeentry.DefaultTypeRegistry()); level != semver.BumpMinor {
+		t.Fatalf("expected minor bump, got %d", level)
+	}
+}
+
+func TestDetectBumpLevelMinorForRemoval(t *testing.T) {
+	group := changelog.VersionGroup{
+		TypeGroups: []changelog.TypeGroup{{
+			Entries: []changelog.EntryWithMeta{{
+				Entry: changeentry.Entry{Type: changeentry.ChangeTypeRemoval},
+			}},
+		}},
+	}
+
+	if level := detectBumpLevel(group, changeentry.DefaultTypeRegistry()); level != semver.BumpMinor {
+		t.Fatalf("expected minor bump for removal (type default), got %d", level)
+	}
+}
+
+func TestDetectBumpLevelPatchForFix(t *testing.T) {
+	group := changelog.VersionGroup{
+		TypeGroups: []changelog.TypeGroup{{
+			Entries: []changelog.EntryWithMeta{{
+				Entry: changeentry.Entry{Type: changeentry.ChangeTypeFix},
+			}},
+		}},
+	}
+
+	if level := detectBumpLevel(group, changeentry.DefaultTypeRegistry()); level != semver.BumpPatch {
+		t.Fatalf("expected patch bump, got %d", level)
+	}
+}
+
+func TestResolveReleaseModeDefaultsToWriteMode(t *testing.T) {
+	mode, err := resolveReleaseMode(ReleaseCommand())
+	if err != nil {
+		t.Fatalf("resolveReleaseMode returned error: %v", err)
+	}
+
+	if !mode.willCreateTag || mode.dryRun || mode.versionOnly || mode.pushTag {
+		t.Fatalf("unexpected default mode: %+v", mode)
+	}
+}
+
+func TestResolveReleaseModeRejectsInvalidCombinations(t *testing.T) {
+	cmd := ReleaseCommand()
+	if err := cmd.Set("dry-run", "true"); err != nil {
+		t.Fatalf("set dry-run: %v", err)
+	}
+	if err := cmd.Set("push", "true"); err != nil {
+		t.Fatalf("set push: %v", err)
+	}
+
+	_, err := resolveReleaseMode(cmd)
+	if err == nil {
+		t.Fatalf("expected error")
+	}
+
+	validationErr, ok := err.(*changeentry.ValidationError)
+	if !ok {
+		t.Fatalf("expected ValidationError, got %T", err)
+	}
+	if validationErr.Field != "flags" {
+		t.Fatalf("expected flags validation error, got %q", validationErr.Field)
+	}
+}
+
+func TestResolveReleaseModeVersionOnly(t *testing.T) {
+	cmd := ReleaseCommand()
+	if err := cmd.Set("version-only", "true"); err != nil {
+		t.Fatalf("set version-only: %v", err)
+	}
+
+	mode, err := resolveReleaseMode(cmd)
+	if err != nil {
+		t.Fatalf("resolveReleaseMode returned error: %v", err)
+	}
+
+	if !mode.versionOnly || mode.willCreateTag {
+		t.Fatalf("unexpected mode: %+v", mode)
+	}
+	if mode.requiresGitWrites() {
+		t.Fatalf("version-only should not require git writes")
+	}
+}
+
+func TestResolveReleaseModePush(t *testing.T) {
+	cmd := ReleaseCommand()
+	if err := cmd.Set("push", "true"); err != nil {
+		t.Fatalf("set push: %v", err)
+	}
+
+	mode, err := resolveReleaseMode(cmd)
+	if err != nil {
+		t.Fatalf("resolveReleaseMode returned error: %v", err)
+	}
+
+	if !mode.pushTag || !mode.willCreateTag {
+		t.Fatalf("unexpected mode: %+v", mode)
+	}
+	if !mode.requiresGitWrites() {
+		t.Fatalf("push mode should require git writes")
+	}
+}
+
+func TestConfigAutoPushSetsModePushTagWhenPolicyEnabled(t *testing.T) {
+	cmd := ReleaseCommand()
+	mode := releaseMode{willCreateTag: true}
+	policy := changeentry.GitWritePolicy{Enabled: true, ReleasePush: true}
+
+	applyConfigPushOverride(cmd, &mode, policy)
+
+	if !mode.pushTag {
+		t.Fatal("expected auto-push to be enabled from config")
+	}
+}
+
+func TestConfigAutoPushDoesNotOverrideExplicitFlagFalse(t *testing.T) {
+	cmd := ReleaseCommand()
+	// Simulate --push=false explicitly set by user.
+	if err := cmd.Set("push", "false"); err != nil {
+		t.Fatalf("set push: %v", err)
+	}
+	mode := releaseMode{willCreateTag: true}
+	policy := changeentry.GitWritePolicy{Enabled: true, ReleasePush: true}
+
+	applyConfigPushOverride(cmd, &mode, policy)
+
+	if mode.pushTag {
+		t.Fatal("expected explicit --push=false to prevent auto-push")
+	}
+}
+
+func TestConfigAutoPushDoesNothingWhenPolicyDisabled(t *testing.T) {
+	cmd := ReleaseCommand()
+	mode := releaseMode{willCreateTag: true}
+	policy := changeentry.GitWritePolicy{Enabled: true, ReleasePush: false}
+
+	applyConfigPushOverride(cmd, &mode, policy)
+
+	if mode.pushTag {
+		t.Fatal("expected no auto-push when ReleasePush is false")
+	}
+}
+
+func TestConfigAutoPushDoesNothingInDryRun(t *testing.T) {
+	cmd := ReleaseCommand()
+	// willCreateTag is false in dry-run, so auto-push should not fire.
+	mode := releaseMode{dryRun: true, willCreateTag: false}
+	policy := changeentry.GitWritePolicy{Enabled: true, ReleasePush: true}
+
+	applyConfigPushOverride(cmd, &mode, policy)
+
+	if mode.pushTag {
+		t.Fatal("expected no auto-push in dry-run mode")
+	}
+}
+
+// ── parseExplicitVersion ─────────────────────────────────────────────────────
+
+func TestParseExplicitVersionValid(t *testing.T) {
+	v, hasV, err := parseExplicitVersion("2.0.0")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if hasV {
+		t.Fatal("expected no v-prefix for bare version")
+	}
+	if v.String(false) != "2.0.0" {
+		t.Fatalf("expected 2.0.0, got %s", v.String(false))
+	}
+}
+
+func TestParseExplicitVersionWithVPrefix(t *testing.T) {
+	v, hasV, err := parseExplicitVersion("v3.1.0")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !hasV {
+		t.Fatal("expected v-prefix")
+	}
+	if v.String(true) != "v3.1.0" {
+		t.Fatalf("expected v3.1.0, got %s", v.String(true))
+	}
+}
+
+func TestParseExplicitVersionStripsPreRelease(t *testing.T) {
+	v, _, err := parseExplicitVersion("1.0.0-beta.1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if v.PreRelease != "" {
+		t.Fatalf("expected pre-release to be stripped, got %q", v.PreRelease)
+	}
+	if v.String(false) != "1.0.0" {
+		t.Fatalf("expected 1.0.0, got %s", v.String(false))
+	}
+}
+
+func TestParseExplicitVersionStripsBuildMetadata(t *testing.T) {
+	v, _, err := parseExplicitVersion("1.0.0+build.42")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if v.Build != "" {
+		t.Fatalf("expected build metadata to be stripped, got %q", v.Build)
+	}
+}
+
+func TestParseExplicitVersionRejectsInvalid(t *testing.T) {
+	_, _, err := parseExplicitVersion("not-a-version")
+	if err == nil {
+		t.Fatal("expected error for invalid version")
+	}
+	validationErr, ok := err.(*changeentry.ValidationError)
+	if !ok {
+		t.Fatalf("expected ValidationError, got %T", err)
+	}
+	if validationErr.Field != "version" {
+		t.Fatalf("expected version field, got %q", validationErr.Field)
+	}
+}
+
+// ── resolveAliasTags ──────────────────────────────────────────────────────────
+
+func TestResolveAliasTagsNever(t *testing.T) {
+	module := changeentry.ModuleConfig{
+		Release: changeentry.ReleasePolicy{AliasTags: "never"},
+	}
+	got, err := resolveAliasTags("", module)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got {
+		t.Fatal("expected false for AliasTags=never")
+	}
+}
+
+func TestResolveAliasTagsAlways(t *testing.T) {
+	module := changeentry.ModuleConfig{
+		Release: changeentry.ReleasePolicy{AliasTags: "always"},
+	}
+	got, err := resolveAliasTags("", module)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !got {
+		t.Fatal("expected true for AliasTags=always")
+	}
+}
+
+// ── createOrUpdateLocalTag ────────────────────────────────────────────────────
+
+func TestCreateOrUpdateLocalTagCreatesTag(t *testing.T) {
+	root := makeGitRepo(t)
+
+	setup := func(args ...string) {
+		t.Helper()
+		if _, err := gitutil.RunGit(root, args...); err != nil {
+			t.Skipf("git %v unavailable: %v", args, err)
+		}
+	}
+
+	setup("config", "user.email", "test@test.com")
+	setup("config", "user.name", "test")
+	setup("commit", "--allow-empty", "-m", "init")
+
+	if err := createOrUpdateLocalTag(root, "v1"); err != nil {
+		t.Fatalf("createOrUpdateLocalTag returned error: %v", err)
+	}
+
+	// Tag should now exist; creating it again with -f should also succeed.
+	if err := createOrUpdateLocalTag(root, "v1"); err != nil {
+		t.Fatalf("createOrUpdateLocalTag (force-update) returned error: %v", err)
+	}
+}
+
+// ── ensureNoPendingPush ───────────────────────────────────────────────────────
+
+func TestEnsureNoPendingPushNoUpstreamSkipsCheck(t *testing.T) {
+	// A freshly-initialised git repo has no remote/upstream, so the check
+	// must be silently skipped (return nil).
+	root := makeGitRepo(t)
+	if err := ensureNoPendingPush(root); err != nil {
+		t.Fatalf("expected no error when no upstream is configured, got: %v", err)
+	}
+}
+
+func TestEnsureNoPendingPushCleanBranchPasses(t *testing.T) {
+	// A git repo that has an upstream and is in sync should pass.
+	// We simulate this by creating a bare "remote" and pushing to it.
+	local := t.TempDir()
+	remote := t.TempDir()
+
+	setup := func(dir string, args ...string) {
+		t.Helper()
+		if _, err := gitutil.RunGit(dir, args...); err != nil {
+			t.Skipf("git %v unavailable: %v", args, err)
+		}
+	}
+
+	setup(remote, "init", "--bare")
+	setup(local, "init")
+	setup(local, "config", "user.email", "test@test.com")
+	setup(local, "config", "user.name", "test")
+	setup(local, "commit", "--allow-empty", "-m", "init")
+	setup(local, "remote", "add", "origin", remote)
+	setup(local, "push", "-u", "origin", "HEAD")
+
+	if err := ensureNoPendingPush(local); err != nil {
+		t.Fatalf("expected no error when branch is up to date, got: %v", err)
+	}
+}
