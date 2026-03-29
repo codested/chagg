@@ -40,7 +40,7 @@ func TestRenderMarkdownOmitsDateAndIncludesIndentedFullBody(t *testing.T) {
 	}
 
 	output := buffer.String()
-	if strings.Contains(output, "## v1.2.3 –") {
+	if strings.Contains(output, "## 1.2.3 –") {
 		t.Fatalf("expected heading without date, got:\n%s", output)
 	}
 
@@ -96,7 +96,7 @@ func TestRenderMarkdownRendersDocsAsUnformattedBodyBeforeSections(t *testing.T) 
 		t.Fatalf("expected docs not to render in their own section, got:\n%s", output)
 	}
 
-	headingIndex := strings.Index(output, "## v1.2.3")
+	headingIndex := strings.Index(output, "## 1.2.3")
 	docIndex := strings.Index(output, "Imported notes from release API.")
 	featureIndex := strings.Index(output, "### Features")
 	if headingIndex == -1 || docIndex == -1 || featureIndex == -1 || !(headingIndex < docIndex && docIndex < featureIndex) {

@@ -108,11 +108,13 @@ func (g VersionGroup) IsStaging() bool {
 }
 
 // VersionTitle returns a display-friendly heading for the version.
+// For released versions, it strips a leading "v" prefix so that
+// "v1.2.3" becomes "1.2.3" while the raw tag is preserved in Version.
 func (g VersionGroup) VersionTitle() string {
 	if g.IsStaging() {
 		return "Unreleased"
 	}
-	return g.Version
+	return strings.TrimPrefix(g.Version, "v")
 }
 
 // FormattedDate returns the tag date as an RFC 3339 timestamp, or an empty
