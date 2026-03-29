@@ -57,8 +57,6 @@ changelog:
 
 homebrew_casks:
   - name: chagg
-    # TODO: Remove skip_upload when ready to publish publicly.
-    skip_upload: true
     repository:
       owner: codested
       name: homebrew-tap
@@ -68,8 +66,6 @@ homebrew_casks:
 
 scoops:
   - name: chagg
-    # TODO: Remove skip_upload when ready to publish publicly.
-    skip_upload: true
     repository:
       owner: codested
       name: scoop-bucket
