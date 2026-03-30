@@ -45,16 +45,6 @@ changelog:
   sort: asc
 
 # ── Package managers ───────────────────────────────────────────────────────────
-#
-# TODO:
-#   AUR (aur.archlinux.org):
-#     1. Create an account at https://aur.archlinux.org
-#     2. Add your SSH public key in AUR account settings
-#     3. Register the package name "chagg-bin" on AUR
-#     4. Add the SSH private key as a secret named AUR_KEY in the chagg repo
-#     5. Set skip_upload to false below
-#     Users install with: yay -S chagg-bin
-
 homebrew_casks:
   - name: chagg
     repository:
@@ -76,8 +66,6 @@ scoops:
 
 aurs:
   - name: chagg-bin
-    # TODO: Remove skip_upload when AUR account and SSH key are set up (see checklist above).
-    skip_upload: true
     git_url: "ssh://aur@aur.archlinux.org/chagg-bin.git"
     private_key: "{{ .Env.AUR_KEY }}"
     maintainers:
