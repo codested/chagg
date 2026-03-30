@@ -1,3 +1,4 @@
 # Fix AUR packaging
 
-Fix GitHub release step did not pass `AUR_KEY` to GoReleaser, and therefore package could not be published.
+~~Fix GitHub release step did not pass `AUR_KEY` to GoReleaser, and therefore package could not be published.~~
+This did unforunately not work as expected, and the package could not be published.
